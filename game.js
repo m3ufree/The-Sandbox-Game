@@ -15,6 +15,8 @@ const PLAYER_SPRINT = 7.0;
 const PLAYER_RADIUS = 0.55;
 const EYE_HEIGHT = 1.7;
 
+const IS_TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const rand = (a, b) => a + Math.random() * (b - a);
 const randInt = (n) => Math.floor(Math.random() * n);
@@ -35,6 +37,14 @@ const deathOverlay = document.getElementById('death-overlay');
 const deathStats = document.getElementById('death-stats');
 const winOverlay = document.getElementById('win-overlay');
 const winStats = document.getElementById('win-stats');
+const rotateOverlay = document.getElementById('rotate-overlay');
+const joyBase = document.getElementById('joy-base');
+const joyKnob = document.getElementById('joy-knob');
+
+if (IS_TOUCH) {
+  document.body.classList.add('touch');
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
+}
 
 // ---------- Game state ----------
 const S = {
@@ -63,6 +73,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
 });
+setTimeout(checkOrientation, 0);
 
 // ---------- Maze ----------
 const grid = new Uint8Array(GW * GH).fill(1);
@@ -421,6 +432,100 @@ flashlight.position.copy(camera.position);
 flashlight.target.position.set(player.pos.x, EYE_HEIGHT, player.pos.z - 10);
 playerLight.position.copy(camera.position);
 
+// ---------- Touch controls ----------
+const touchInput = { moveId: null, lookId: null, moveX: 0, moveZ: 0, sprint: false, lookLast: { x: 0, y: 0 } };
+const JOY_R = 46;
+let joyCenter = { x: 0, y: 0 };
+
+canvas.addEventListener('touchstart', (e) => {
+  if (!S.playing) return;
+  for (const t of e.changedTouches) {
+    if (t.target.closest && t.target.closest('.tbtn')) continue;
+    e.preventDefault();
+    const r = joyBase.getBoundingClientRect();
+    joyCenter = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    if (touchInput.moveId === null && Math.hypot(t.clientX - joyCenter.x, t.clientY - joyCenter.y) < 120) {
+      touchInput.moveId = t.identifier;
+    } else if (touchInput.lookId === null) {
+      touchInput.lookId = t.identifier;
+      touchInput.lookLast = { x: t.clientX, y: t.clientY };
+    }
+  }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchInput.moveId) {
+      e.preventDefault();
+      const dx = t.clientX - joyCenter.x, dy = t.clientY - joyCenter.y;
+      const d = Math.hypot(dx, dy);
+      const m = Math.min(d, JOY_R);
+      const nx = d > 0 ? dx / d : 0, ny = d > 0 ? dy / d : 0;
+      joyKnob.style.transform = `translate(${nx * m}px, ${ny * m}px)`;
+      touchInput.moveX = nx * (m / JOY_R);
+      touchInput.moveZ = ny * (m / JOY_R);
+    } else if (t.identifier === touchInput.lookId) {
+      e.preventDefault();
+      player.yaw -= (t.clientX - touchInput.lookLast.x) * 0.0055;
+      player.pitch = clamp(player.pitch - (t.clientY - touchInput.lookLast.y) * 0.0055, -1.45, 1.45);
+      touchInput.lookLast = { x: t.clientX, y: t.clientY };
+    }
+  }
+}, { passive: false });
+
+function handleTouchEnd(e) {
+  for (const t of e.changedTouches) {
+    if (t.identifier === touchInput.moveId) {
+      touchInput.moveId = null;
+      touchInput.moveX = 0;
+      touchInput.moveZ = 0;
+      joyKnob.style.transform = 'translate(0, 0)';
+    } else if (t.identifier === touchInput.lookId) {
+      touchInput.lookId = null;
+    }
+  }
+}
+canvas.addEventListener('touchend', handleTouchEnd);
+canvas.addEventListener('touchcancel', handleTouchEnd);
+
+document.getElementById('btn-flash').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (S.playing) toggleFlashlight();
+}, { passive: false });
+
+document.getElementById('btn-sprint').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  touchInput.sprint = !touchInput.sprint;
+  e.currentTarget.classList.toggle('active', touchInput.sprint);
+}, { passive: false });
+
+function pauseGame() {
+  S.playing = false;
+  pauseOverlay.classList.remove('hidden');
+}
+document.getElementById('btn-pause').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (S.playing) pauseGame();
+}, { passive: false });
+
+function checkOrientation() {
+  if (!IS_TOUCH) return;
+  const portrait = window.innerHeight > window.innerWidth;
+  if (portrait) {
+    rotateOverlay.classList.remove('hidden');
+    if (S.playing) { S.pausedByRotate = true; S.playing = false; }
+  } else {
+    rotateOverlay.classList.add('hidden');
+    if (S.pausedByRotate && S.started && !S.dead && !S.won) {
+      S.playing = true;
+      S.pausedByRotate = false;
+      pauseOverlay.classList.add('hidden');
+    }
+  }
+}
+window.addEventListener('resize', checkOrientation);
+window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 120));
+
 const keys = {};
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
@@ -444,9 +549,10 @@ function collides(x, z) {
 }
 
 function updatePlayer(dt) {
-  const fwd = (keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0);
-  const strafe = (keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0);
-  const wantSprint = (keys['ShiftLeft'] || keys['ShiftRight']) && S.stamina > 1 && (fwd !== 0 || strafe !== 0);
+  const joyActive = touchInput.moveId !== null;
+  const fwd = joyActive ? -touchInput.moveZ : ((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0));
+  const strafe = joyActive ? touchInput.moveX : ((keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0));
+  const wantSprint = ((keys['ShiftLeft'] || keys['ShiftRight']) || touchInput.sprint) && S.stamina > 1 && (Math.abs(fwd) > 0.01 || Math.abs(strafe) > 0.01);
   const speed = wantSprint ? PLAYER_SPRINT : PLAYER_WALK;
 
   if (wantSprint) { S.stamina = Math.max(0, S.stamina - 24 * dt); S.staminaDelay = 1; }
@@ -461,8 +567,9 @@ function updatePlayer(dt) {
   const len = Math.hypot(vx, vz);
   player.moving = len > 0;
   if (len > 0) {
-    vx = vx / len * speed * dt;
-    vz = vz / len * speed * dt;
+    const mag = Math.min(len, 1);
+    vx = vx / len * speed * mag * dt;
+    vz = vz / len * speed * mag * dt;
     const nx = player.pos.x + vx;
     if (!collides(nx, player.pos.z)) player.pos.x = nx;
     const nz = player.pos.z + vz;
@@ -753,6 +860,14 @@ function startGame() {
   winOverlay.classList.add('hidden');
   hud.classList.remove('hidden');
   S.started = true;
+  if (IS_TOUCH) {
+    S.playing = true;
+    if (!S.startTime) S.startTime = performance.now();
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    }
+    return;
+  }
   S.playing = false;
   canvas.requestPointerLock();
 }
@@ -760,7 +875,14 @@ function startGame() {
 document.getElementById('start-btn').addEventListener('click', startGame);
 document.getElementById('retry-btn').addEventListener('click', () => location.reload());
 document.getElementById('again-btn').addEventListener('click', () => location.reload());
-pauseOverlay.addEventListener('click', () => canvas.requestPointerLock());
+pauseOverlay.addEventListener('click', () => {
+  if (IS_TOUCH) {
+    S.playing = true;
+    pauseOverlay.classList.add('hidden');
+  } else {
+    canvas.requestPointerLock();
+  }
+});
 
 document.addEventListener('pointerlockchange', () => {
   const locked = document.pointerLockElement === canvas;

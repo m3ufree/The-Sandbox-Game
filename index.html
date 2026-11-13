@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>THE MONSTER — 3D хоррор</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -80,6 +80,37 @@
   #pause-overlay { background: rgba(0,0,0,0.82); cursor: pointer; }
   #pause-overlay h2 { color: #c9c2b8; letter-spacing: 0.3em; font-size: 28px; }
   #pause-overlay p { margin-top: 16px; color: #8a847a; font-size: 14px; }
+
+  /* Touch controls */
+  html, body, #game-canvas { touch-action: none; -webkit-tap-highlight-color: transparent; }
+  body { user-select: none; -webkit-user-select: none; }
+  #touch-ui { position: fixed; inset: 0; pointer-events: none; z-index: 11; display: none; }
+  body.touch #touch-ui { display: block; }
+  #joy-base {
+    position: absolute; left: 38px; bottom: 150px; width: 124px; height: 124px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.05);
+  }
+  #joy-knob {
+    position: absolute; left: 50%; top: 50%; width: 54px; height: 54px;
+    margin: -27px 0 0 -27px; border-radius: 50%; background: rgba(255,255,255,0.22);
+  }
+  .tbtn {
+    position: absolute; pointer-events: auto; width: 66px; height: 66px;
+    border-radius: 50%; border: 2px solid rgba(255,255,255,0.3);
+    background: rgba(0,0,0,0.45); color: #c9c2b8; font-size: 26px;
+    display: flex; align-items: center; justify-content: center;
+    touch-action: none;
+  }
+  .tbtn.active { background: rgba(179,0,0,0.55); border-color: #b30000; }
+  #btn-flash { right: 128px; bottom: 160px; }
+  #btn-sprint { right: 38px; bottom: 140px; }
+  #btn-pause {
+    top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px;
+  }
+  #rotate-overlay { z-index: 40; background: #000; }
+  #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
+  @keyframes rotate-hint { 0%,20% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
 </style>
 </head>
 <body>
@@ -129,6 +160,19 @@
   <h1>ТЫ ВЫБРАЛСЯ</h1>
   <p id="win-stats"></p>
   <button class="btn" id="again-btn" style="margin-top:30px">СЫГРАТЬ ЕЩЁ РАЗ</button>
+</div>
+
+<div id="rotate-overlay" class="overlay hidden">
+  <div class="icon">📱</div>
+  <h2>ПОВЕРНИ ТЕЛЕФОН ГОРИЗОНТАЛЬНО</h2>
+  <p>Игра рассчитана на альбомный режим</p>
+</div>
+
+<div id="touch-ui">
+  <div id="joy-base"><div id="joy-knob"></div></div>
+  <div class="tbtn" id="btn-flash">🔦</div>
+  <div class="tbtn" id="btn-sprint">🏃</div>
+  <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
 <script type="importmap">
