@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>THE MONSTER — 3D хоррор</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+  #game-canvas { display: block; }
+
+  .overlay {
+    position: fixed; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    background: radial-gradient(ellipse at center, rgba(10,0,0,0.85), rgba(0,0,0,0.97));
+    color: #c9c2b8; z-index: 20; padding: 24px;
+  }
+  .hidden { display: none !important; }
+
+  h1.title {
+    font-size: clamp(42px, 9vw, 110px); letter-spacing: 0.18em; color: #b30000;
+    text-shadow: 0 0 18px rgba(179,0,0,0.8), 0 0 60px rgba(179,0,0,0.4);
+    margin-bottom: 8px; font-weight: 900;
+  }
+  .subtitle { color: #6f6a62; letter-spacing: 0.35em; font-size: 13px; margin-bottom: 34px; }
+
+  .btn {
+    background: transparent; border: 1px solid #b30000; color: #d8d2c8;
+    font-family: inherit; font-size: 20px; letter-spacing: 0.25em;
+    padding: 14px 46px; cursor: pointer; transition: all 0.2s;
+  }
+  .btn:hover { background: #b30000; color: #000; box-shadow: 0 0 30px rgba(179,0,0,0.6); }
+
+  .help { margin-top: 36px; font-size: 14px; line-height: 2; color: #8a847a; }
+  .help b { color: #c9c2b8; }
+  .flicker { animation: flicker 2.4s infinite; }
+  @keyframes flicker { 0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:0.25} 94%{opacity:1} 96%{opacity:0.4} 97%{opacity:1} }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
+  #objective {
+    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
+    color: #9a948a; font-size: 15px; letter-spacing: 0.12em;
+    text-shadow: 0 0 8px #000; transition: opacity 0.5s;
+  }
+  #fuses {
+    position: absolute; top: 44px; left: 50%; transform: translateX(-50%);
+    color: #d8b23a; font-size: 14px; letter-spacing: 0.12em; text-shadow: 0 0 8px #000;
+  }
+  .bar-wrap { position: absolute; left: 26px; bottom: 26px; width: 190px; }
+  .bar-label { color: #8a847a; font-size: 12px; letter-spacing: 0.2em; margin-bottom: 4px; }
+  .bar { height: 9px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); }
+  .bar > div { height: 100%; width: 100%; transition: width 0.15s linear; }
+  #battery-fill { background: #d8b23a; box-shadow: 0 0 8px rgba(216,178,58,0.7); }
+  #stamina-wrap { position: absolute; left: 26px; bottom: 78px; width: 190px; }
+  #stamina-fill { background: #7a1f1f; box-shadow: 0 0 8px rgba(179,0,0,0.6); }
+
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; width: 5px; height: 5px;
+    margin: -2.5px; border-radius: 50%; background: rgba(255,255,255,0.45);
+  }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 12; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 42%, rgba(90,0,0,0.85) 100%);
+  }
+  #damage-flash {
+    position: fixed; inset: 0; pointer-events: none; z-index: 13; opacity: 0; background: #7a0000;
+  }
+  #msg {
+    position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
+    color: #d8d2c8; font-size: 17px; letter-spacing: 0.15em; text-shadow: 0 0 10px #000;
+    opacity: 0; transition: opacity 0.4s; text-align: center;
+  }
+
+  #death-overlay h1 { color: #b30000; font-size: clamp(36px, 7vw, 80px); letter-spacing: 0.2em; }
+  #death-overlay p, #win-overlay p { margin-top: 14px; color: #8a847a; font-size: 16px; letter-spacing: 0.1em; }
+  #win-overlay h1 { color: #3f7a3f; font-size: clamp(36px, 7vw, 80px); letter-spacing: 0.2em; text-shadow: 0 0 20px rgba(63,122,63,0.6); }
+
+  #pause-overlay { background: rgba(0,0,0,0.82); cursor: pointer; }
+  #pause-overlay h2 { color: #c9c2b8; letter-spacing: 0.3em; font-size: 28px; }
+  #pause-overlay p { margin-top: 16px; color: #8a847a; font-size: 14px; }
+</style>
+</head>
+<body>
+<canvas id="game-canvas"></canvas>
+
+<div id="hud" class="hidden">
+  <div id="objective">Найди 6 предохранителей и открой дверь</div>
+  <div id="fuses">🔋 0 / 6</div>
+  <div id="crosshair"></div>
+  <div id="msg"></div>
+  <div id="stamina-wrap">
+    <div class="bar-label">ВЫНОСЛИВОСТЬ</div>
+    <div class="bar"><div id="stamina-fill"></div></div>
+  </div>
+  <div class="bar-wrap">
+    <div class="bar-label">БАТАРЕЯ [F]</div>
+    <div class="bar"><div id="battery-fill"></div></div>
+  </div>
+</div>
+
+<div id="vignette"></div>
+<div id="damage-flash"></div>
+
+<div id="menu-overlay" class="overlay">
+  <h1 class="title flicker">THE MONSTER</h1>
+  <div class="subtitle">ОНО УЖЕ ЗНАЕТ, ЧТО ТЫ ЗДЕСЬ</div>
+  <button class="btn" id="start-btn">ИГРАТЬ</button>
+  <div class="help">
+    <b>WASD</b> — движение &nbsp;·&nbsp; <b>МЫШЬ</b> — осмотр &nbsp;·&nbsp; <b>SHIFT</b> — бег<br>
+    <b>F</b> — фонарик (свет помогает видеть, но ОНО видит свет)<br>
+    Собери <b>6 предохранителей</b> и найди выход. Не дай ему подойти.
+  </div>
+</div>
+
+<div id="pause-overlay" class="overlay hidden">
+  <h2>ПАУЗА</h2>
+  <p>Кликни, чтобы продолжить</p>
+</div>
+
+<div id="death-overlay" class="overlay hidden">
+  <h1>ОНО ТЕБЯ НАШЛО</h1>
+  <p id="death-stats"></p>
+  <button class="btn" id="retry-btn" style="margin-top:30px">ПОПРОБОВАТЬ СНОВА</button>
+</div>
+
+<div id="win-overlay" class="overlay hidden">
+  <h1>ТЫ ВЫБРАЛСЯ</h1>
+  <p id="win-stats"></p>
+  <button class="btn" id="again-btn" style="margin-top:30px">СЫГРАТЬ ЕЩЁ РАЗ</button>
+</div>
+
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+</script>
+<script type="module" src="game.js"></script>
+</body>
+</html>
