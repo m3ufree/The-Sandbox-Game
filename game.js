@@ -1225,7 +1225,13 @@ function explode(obj) {
       const power = 1 - d / 8;
       o.vel.addScaledVector(dir, 13 * power);
       o.vel.y += 7 * power;
-      if (o.type === 'car') o.av = rand(-3, 3);
+      if (o.type === 'car') {
+        o.av = rand(-3, 3);
+        ensureSoft(o);
+        if (o.soft) for (const c of o.soft.corners) {
+          c.vel.add(_sv.set(rand(-1, 1), rand(0.2, 1), rand(-1, 1)).multiplyScalar(9 * power));
+        }
+      }
     }
   }
 }
@@ -1233,6 +1239,7 @@ function explode(obj) {
 function updatePhysics(dt) {
   for (const o of objects) {
     if (S.driving === o) continue;
+    if (o.type === 'car') updateSoftBody(o, dt);
     if (o.av && o.mesh.position.y > 0.05) o.mesh.rotation.y += o.av * dt;
     if (o.vel.lengthSq() < 0.0001) continue;
     o.vel.y -= 18 * dt;
@@ -1337,6 +1344,17 @@ function updateCar(dt) {
     const bounce = -fwdSpeed * 0.3;
     obj.vel.x = fx * bounce + rx * latSpeed * 0.4;
     obj.vel.z = fz * bounce + rz * latSpeed * 0.4;
+    ensureSoft(obj);
+    if (obj.soft) {
+      const imp = Math.min(Math.abs(fwdSpeed), 15);
+      for (const c of obj.soft.corners) {
+        if (c.rest.z > 0) {
+          c.vel.z -= imp * rand(0.9, 1.4);
+          c.vel.x += rand(-1, 1) * imp * 0.25;
+          c.vel.y += rand(-1, 1) * imp * 0.15;
+        }
+      }
+    }
   }
 
   const body = obj.mesh.userData.bodyGroup;
@@ -1351,6 +1369,7 @@ function updateCar(dt) {
   }
 
   obj.mesh.rotation.y = carState.heading;
+  updateSoftBody(obj, dt);
   player.pos.set(obj.mesh.position.x, EYE_HEIGHT, obj.mesh.position.z);
   if (engineOsc && engineGain) {
     const sp = Math.abs(fwdSpeed);
@@ -1476,6 +1495,119 @@ function importXML() {
 
 window.addEventListener('pagehide', () => { try { saveLocal(true); } catch (e) {} });
 setInterval(() => { if (S.started) saveLocal(true); }, 20000);
+
+// ---------- SoftBody (car shell) ----------
+const SOFT_K = 90, SOFT_D = 4.5;
+const _sd = new THREE.Vector3(), _sr = new THREE.Vector3(), _sv = new THREE.Vector3();
+
+function ensureSoft(o) {
+  if (o.soft || o.type !== 'car') return;
+  const bg = o.mesh.userData.bodyGroup;
+  if (!bg) return;
+  const corners = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const rest = new THREE.Vector3(sx, 0.8 + sy * 0.75, sz * 2.15);
+    corners.push({ rest, pos: rest.clone(), vel: new THREE.Vector3() });
+  }
+  o.soft = { corners, active: false };
+  o.deformMeshes = [];
+  bg.traverse(m => {
+    if (m.isMesh) {
+      m.userData.base = m.geometry.attributes.position.array.slice();
+      o.deformMeshes.push(m);
+    }
+  });
+}
+
+function updateSoftBody(o, dt) {
+  ensureSoft(o);
+  if (!o.soft) return;
+  const s = o.soft;
+  const sub = Math.min(dt, 0.05) / 3;
+  for (let it = 0; it < 3; it++) {
+    for (const c of s.corners) {
+      c.vel.y -= 5 * sub;
+      c.vel.multiplyScalar(1 - 0.4 * sub);
+    }
+    for (let i = 0; i < 8; i++) for (let j = i + 1; j < 8; j++) {
+      const a = s.corners[i], b = s.corners[j];
+      _sd.subVectors(b.pos, a.pos);
+      const dist = _sd.length() || 0.0001;
+      const rest = a.rest.distanceTo(b.rest);
+      const f = (dist - rest) * SOFT_K * sub / dist;
+      a.vel.addScaledVector(_sd, f * 0.5);
+      b.vel.addScaledVector(_sd, -f * 0.5);
+      const rel = _sr.subVectors(b.vel, a.vel).dot(_sd) / (dist * dist);
+      const dmp = rel * SOFT_D * sub;
+      a.vel.addScaledVector(_sd, dmp * 0.5);
+      b.vel.addScaledVector(_sd, -dmp * 0.5);
+    }
+    const floor = -o.mesh.position.y + 0.03;
+    for (const c of s.corners) {
+      c.pos.addScaledVector(c.vel, sub);
+      if (c.pos.y < floor) {
+        c.pos.y = floor;
+        if (c.vel.y < 0) c.vel.y *= -0.35;
+        c.vel.x *= 0.92;
+        c.vel.z *= 0.92;
+      }
+    }
+  }
+  let maxVel = 0, maxOff = 0;
+  for (const c of s.corners) {
+    maxVel = Math.max(maxVel, c.vel.length());
+    maxOff = Math.max(maxOff, c.pos.distanceTo(c.rest));
+  }
+  if (maxVel < 0.06 && maxOff < 0.02) {
+    for (const c of s.corners) { c.pos.copy(c.rest); c.vel.set(0, 0, 0); }
+    if (s.active) { softDeform(o); s.active = false; }
+  } else {
+    s.active = true;
+    softDeform(o);
+  }
+}
+
+const _sm = new THREE.Matrix4(), _smi = new THREE.Matrix4(), _svp = new THREE.Vector3();
+
+function softDeform(o) {
+  const bg = o.mesh.userData.bodyGroup;
+  if (!bg) return;
+  bg.updateMatrix();
+  const HX = 1.0, HY = 0.75, CY = 0.8, HZ = 2.15;
+  const d = new Float32Array(24);
+  for (let i = 0; i < 8; i++) {
+    const c = o.soft.corners[i];
+    d[i * 3] = c.pos.x - c.rest.x;
+    d[i * 3 + 1] = c.pos.y - c.rest.y;
+    d[i * 3 + 2] = c.pos.z - c.rest.z;
+  }
+  for (const mesh of o.deformMeshes) {
+    _sm.multiplyMatrices(bg.matrix, mesh.matrix);
+    _smi.copy(_sm).invert();
+    const pos = mesh.geometry.attributes.position;
+    const base = mesh.userData.base;
+    for (let i = 0; i < pos.count; i++) {
+      _svp.set(base[i * 3], base[i * 3 + 1], base[i * 3 + 2]).applyMatrix4(_sm);
+      const tx = clamp(_svp.x / HX * 0.5 + 0.5, 0, 1);
+      const ty = clamp((_svp.y - CY) / HY * 0.5 + 0.5, 0, 1);
+      const tz = clamp(_svp.z / HZ * 0.5 + 0.5, 0, 1);
+      const wx = [1 - tx, tx], wy = [1 - ty, ty], wz = [1 - tz, tz];
+      let dx = 0, dy = 0, dz = 0;
+      for (let a = 0; a < 2; a++) for (let b = 0; b < 2; b++) for (let c2 = 0; c2 < 2; c2++) {
+        const ci = a * 4 + b * 2 + c2;
+        const w = wx[a] * wy[b] * wz[c2];
+        dx += d[ci * 3] * w;
+        dy += d[ci * 3 + 1] * w;
+        dz += d[ci * 3 + 2] * w;
+      }
+      _svp.x += dx; _svp.y += dy; _svp.z += dz;
+      _svp.applyMatrix4(_smi);
+      pos.setXYZ(i, _svp.x, _svp.y, _svp.z);
+    }
+    pos.needsUpdate = true;
+    mesh.geometry.computeVertexNormals();
+  }
+}
 
 // ---------- HUD ----------
 let msgTimer = 0;
