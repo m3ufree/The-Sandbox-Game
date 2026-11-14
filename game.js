@@ -875,6 +875,10 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') toggleDayNight();
   if (e.code === 'KeyX') deleteAimed();
   if (e.code === 'KeyE') { if (S.driving) exitCar(); else { const c = nearestCar(); if (c) enterCar(c); } }
+  if (e.code === 'KeyV' || e.code === 'KeyC') {
+    const o = findAimed();
+    if (o && o.tv) { if (e.code === 'KeyV') setTvLink(o); else watchTv(o); }
+  }
   const digit = e.code.match(/^Digit([1-9])$/);
   if (digit) selectSlot(Math.min(parseInt(digit[1], 10) - 1, CATALOG.length - 1));
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) e.preventDefault();
@@ -1292,6 +1296,99 @@ function buildBombNuke() {
   return g;
 }
 
+function tvScreenMesh(w, h) {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshBasicMaterial({ color: 0x0b0d12 }));
+  m.rotation.y = Math.PI;
+  return m;
+}
+
+function buildTvCrt() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x6b4a26, roughness: 0.8 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.85, 0.7), wood);
+  body.position.y = 0.75;
+  const screen = tvScreenMesh(0.82, 0.6);
+  screen.position.set(0, 0.78, -0.36);
+  const knobG = new THREE.CylinderGeometry(0.045, 0.045, 0.04, 12);
+  knobG.rotateX(Math.PI / 2);
+  const knobM = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, roughness: 0.6 });
+  const knob1 = new THREE.Mesh(knobG, knobM); knob1.position.set(0.42, 0.9, -0.36);
+  const knob2 = new THREE.Mesh(knobG, knobM); knob2.position.set(0.42, 0.72, -0.36);
+  const antM = new THREE.MeshStandardMaterial({ color: 0x9aa0a6, roughness: 0.4, metalness: 0.6 });
+  const a1 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.8, 6), antM);
+  a1.position.set(-0.2, 1.55, 0); a1.rotation.z = 0.5;
+  const a2 = new THREE.Mesh(new THREE.CylinderGeometry(0.012, 0.012, 0.8, 6), antM);
+  a2.position.set(0.2, 1.55, 0); a2.rotation.z = -0.5;
+  const legG = new THREE.BoxGeometry(0.08, 0.32, 0.08);
+  const l1 = new THREE.Mesh(legG, wood); l1.position.set(-0.42, 0.16, -0.22);
+  const l2 = new THREE.Mesh(legG, wood); l2.position.set(0.42, 0.16, -0.22);
+  const l3 = new THREE.Mesh(legG, wood); l3.position.set(-0.42, 0.16, 0.22);
+  const l4 = new THREE.Mesh(legG, wood); l4.position.set(0.42, 0.16, 0.22);
+  g.add(body, screen, knob1, knob2, a1, a2, l1, l2, l3, l4);
+  g.userData.screen = screen; g.userData.screenW = 0.82; g.userData.screenH = 0.6;
+  return g;
+}
+
+function buildTvFlat() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.5 });
+  const panel = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.95, 0.07), dark);
+  panel.position.y = 1.15;
+  const screen = tvScreenMesh(1.45, 0.8);
+  screen.position.set(0, 1.16, -0.045);
+  const neck = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.35, 0.14), dark);
+  neck.position.y = 0.5;
+  const base = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.06, 0.4), dark);
+  base.position.y = 0.33;
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.012), new THREE.MeshBasicMaterial({ color: 0x30ff60 }));
+  led.position.set(0.7, 0.72, -0.04);
+  g.add(panel, screen, neck, base, led);
+  g.userData.screen = screen; g.userData.screenW = 1.45; g.userData.screenH = 0.8;
+  return g;
+}
+
+function buildTvBig() {
+  const g = new THREE.Group();
+  const dark = new THREE.MeshStandardMaterial({ color: 0x101216, roughness: 0.5 });
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(2.8, 1.7, 0.1), dark);
+  frame.position.y = 1.7;
+  const screen = tvScreenMesh(2.6, 1.45);
+  screen.position.set(0, 1.72, -0.06);
+  const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.09, 0.9, 10), new THREE.MeshStandardMaterial({ color: 0x3a3f45, metalness: 0.5, roughness: 0.5 }));
+  pole.position.y = 0.45;
+  const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.55, 0.08, 16), new THREE.MeshStandardMaterial({ color: 0x2a2e33, roughness: 0.7 }));
+  foot.position.y = 0.04;
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.12, 0.12), new THREE.MeshStandardMaterial({ color: 0x1c1f24, roughness: 0.6 }));
+  bar.position.set(0, 0.78, -0.05);
+  g.add(frame, screen, pole, foot, bar);
+  g.userData.screen = screen; g.userData.screenW = 2.6; g.userData.screenH = 1.45;
+  return g;
+}
+
+function buildTvRetro() {
+  const g = new THREE.Group();
+  const wood = new THREE.MeshStandardMaterial({ color: 0x7a5a30, roughness: 0.85 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.75, 0.55), wood);
+  body.position.y = 0.65;
+  const screen = new THREE.Mesh(new THREE.CircleGeometry(0.26, 24), new THREE.MeshBasicMaterial({ color: 0x0b0d12 }));
+  screen.rotation.y = Math.PI;
+  screen.position.set(-0.15, 0.68, -0.28);
+  const dialG = new THREE.CylinderGeometry(0.06, 0.06, 0.03, 14);
+  dialG.rotateX(Math.PI / 2);
+  const dialM = new THREE.MeshStandardMaterial({ color: 0xd8cfc0, roughness: 0.5 });
+  const d1 = new THREE.Mesh(dialG, dialM); d1.position.set(0.3, 0.82, -0.28);
+  const d2 = new THREE.Mesh(dialG, dialM); d2.position.set(0.3, 0.62, -0.28);
+  const legG = new THREE.CylinderGeometry(0.03, 0.045, 0.28, 8);
+  const legM = new THREE.MeshStandardMaterial({ color: 0x54401f, roughness: 0.8 });
+  const w1 = new THREE.Mesh(legG, legM); w1.position.set(-0.38, 0.14, -0.18);
+  const w2 = new THREE.Mesh(legG, legM); w2.position.set(0.38, 0.14, -0.18);
+  const w3 = new THREE.Mesh(legG, legM); w3.position.set(-0.38, 0.14, 0.18);
+  const w4 = new THREE.Mesh(legG, legM); w4.position.set(0.38, 0.14, 0.18);
+  g.add(body, screen, d1, d2, w1, w2, w3, w4);
+  g.userData.screen = screen; g.userData.screenW = 0.52; g.userData.screenH = 0.52;
+  return g;
+}
+
 const CATALOG = [
   { id: 'box', name: 'ЯЩИК', icon: '📦', build: buildBox },
   { id: 'barrel', name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
@@ -1304,6 +1401,10 @@ const CATALOG = [
   { id: 'bomb-med', name: 'СРЕДНЯЯ', icon: '🧨', build: buildBombMed, tnt: true },
   { id: 'bomb-big', name: 'БОМБА', icon: '💣', build: buildBombBig, tnt: true },
   { id: 'nuke', name: 'ЯДЕРКА', icon: '☢️', build: buildBombNuke, tnt: true },
+  { id: 'tv-crt', name: 'ТВ ЛАМПОВЫЙ', icon: '📺', build: buildTvCrt, tv: true },
+  { id: 'tv-flat', name: 'ТВ ПЛОСКИЙ', icon: '📺', build: buildTvFlat, tv: true },
+  { id: 'tv-big', name: 'ТВ КИНОТЕАТР', icon: '📺', build: buildTvBig, tv: true },
+  { id: 'tv-retro', name: 'ТВ РЕТРО', icon: '📺', build: buildTvRetro, tv: true },
 ];
 
 const BOMBS = {
@@ -1327,11 +1428,12 @@ function spawnSelected() {
   mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
   mesh.rotation.y = player.yaw + Math.PI;
   spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null });
+  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, url: null });
   playPop();
 }
 
 function removeObject(obj) {
+  if (S.tvObj === obj) stopTvScreen();
   const i = objects.indexOf(obj);
   if (i === -1) return;
   objects.splice(i, 1);
@@ -1614,7 +1716,9 @@ function worldToXML() {
     xml += ' x="' + o.mesh.position.x.toFixed(2) + '"';
     xml += ' y="' + o.mesh.position.y.toFixed(2) + '"';
     xml += ' z="' + o.mesh.position.z.toFixed(2) + '"';
-    xml += ' ry="' + o.mesh.rotation.y.toFixed(3) + '"/>\n';
+    xml += ' ry="' + o.mesh.rotation.y.toFixed(3) + '"';
+    if (o.url) xml += ' url="' + o.url.replace(/&/g, '&amp;').replace(/"/g, '&quot;') + '"';
+    xml += '/>\n';
   }
   xml += '</sandbox>';
   return xml;
@@ -1652,7 +1756,8 @@ function loadFromXML(text) {
     mesh.position.set(x, y, z);
     mesh.rotation.y = parseFloat(el.getAttribute('ry')) || 0;
     spawnedGroup.add(mesh);
-    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null });
+    const rawUrl = el.getAttribute('url');
+    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, url: rawUrl && parseVideo(rawUrl) ? rawUrl : null });
   }
 
   document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
@@ -2303,8 +2408,8 @@ function startGame() {
   hud.classList.remove('hidden');
   mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
   hintEl.textContent = IS_TOUCH
-    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🌓 день/ночь'
-    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · Space — прыжок · T — день/ночь';
+    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🎒 рюкзак · 📺 ТВ'
+    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · B — рюкзак · V/C — ТВ · T — день/ночь';
   S.started = true;
 
   if (IS_TOUCH) {
@@ -2344,6 +2449,159 @@ document.getElementById('xml-file').addEventListener('change', (e) => {
   reader.readAsText(file);
   e.target.value = '';
 });
+
+// ---------- TVs: video on screen ----------
+const btnTvWatch = document.getElementById('btn-tv-watch');
+const btnTvLink = document.getElementById('btn-tv-link');
+
+const cssWrap = document.createElement('div');
+cssWrap.style.cssText = 'position:fixed;left:0;top:0;overflow:hidden;pointer-events:none;z-index:5;display:none;';
+const cssInner = document.createElement('div');
+cssInner.style.cssText = 'transform-style:preserve-3d;transform-origin:0 0;';
+cssWrap.appendChild(cssInner);
+const tvIframe = document.createElement('iframe');
+tvIframe.style.cssText = 'position:absolute;border:0;pointer-events:auto;left:0;top:0;';
+tvIframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+tvIframe.setAttribute('allowfullscreen', '');
+cssInner.appendChild(tvIframe);
+document.body.appendChild(cssWrap);
+
+const _cssM = new THREE.Matrix4();
+const _tvV1 = new THREE.Vector3();
+const _tvV2 = new THREE.Vector3();
+const _tvV3 = new THREE.Vector3();
+let tvVideo = null;
+let tvTexture = null;
+
+function cssEps(v) { return Math.abs(v) < 1e-10 ? 0 : v; }
+function cssCameraMatrix(m) {
+  const e = m.elements;
+  return 'matrix3d(' + cssEps(e[0]) + ',' + cssEps(-e[1]) + ',' + cssEps(e[2]) + ',' + cssEps(e[3]) + ','
+    + cssEps(e[4]) + ',' + cssEps(-e[5]) + ',' + cssEps(e[6]) + ',' + cssEps(e[7]) + ','
+    + cssEps(e[8]) + ',' + cssEps(-e[9]) + ',' + cssEps(e[10]) + ',' + cssEps(e[11]) + ','
+    + cssEps(e[12]) + ',' + cssEps(-e[13]) + ',' + cssEps(e[14]) + ',' + cssEps(e[15]) + ')';
+}
+function cssObjectMatrix(m) {
+  const e = m.elements;
+  return 'translate(-50%,-50%) matrix3d(' + cssEps(e[0]) + ',' + cssEps(e[1]) + ',' + cssEps(e[2]) + ',' + cssEps(e[3]) + ','
+    + cssEps(-e[4]) + ',' + cssEps(-e[5]) + ',' + cssEps(-e[6]) + ',' + cssEps(-e[7]) + ','
+    + cssEps(e[8]) + ',' + cssEps(e[9]) + ',' + cssEps(e[10]) + ',' + cssEps(e[11]) + ','
+    + cssEps(e[12]) + ',' + cssEps(e[13]) + ',' + cssEps(e[14]) + ',' + cssEps(e[15]) + ')';
+}
+
+function parseVideo(u) {
+  if (!u) return null;
+  const m = u.match(/(?:youtube\.com\/(?:watch\?[^#]*v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{6,})/);
+  if (m) return { kind: 'yt', id: m[1] };
+  if (/^https?:\/\//i.test(u)) return { kind: 'file', src: u };
+  return null;
+}
+
+function ensureTvVideo() {
+  if (tvVideo) return tvVideo;
+  tvVideo = document.createElement('video');
+  tvVideo.crossOrigin = 'anonymous';
+  tvVideo.loop = true;
+  tvVideo.playsInline = true;
+  tvVideo.setAttribute('playsinline', '');
+  tvVideo.addEventListener('error', () => {
+    if (S.tvObj) showMsg('⚠️ Не удалось загрузить видео с этой ссылки (нет доступа/CORS)');
+    stopTvScreen();
+  });
+  return tvVideo;
+}
+
+function stopTvScreen() {
+  if (S.tvObj) {
+    const scr = S.tvObj.mesh.userData.screen;
+    if (scr) {
+      scr.material.map = null;
+      scr.material.color.set(0x0b0d12);
+      scr.material.needsUpdate = true;
+    }
+  }
+  S.tvObj = null;
+  if (tvVideo) tvVideo.pause();
+  if (tvTexture) { tvTexture.dispose(); tvTexture = null; }
+  tvIframe.src = 'about:blank';
+}
+
+function watchTv(o) {
+  const p = parseVideo(o.url);
+  if (!p) { setTvLink(o); return; }
+  const wasSame = S.tvObj === o;
+  stopTvScreen();
+  if (wasSame) { showMsg('📺 ТВ выключен'); return; }
+  S.tvObj = o;
+  const scr = o.mesh.userData.screen;
+  if (p.kind === 'yt') {
+    tvIframe.src = 'https://www.youtube.com/embed/' + p.id + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
+    tvIframe.style.width = (o.mesh.userData.screenW * 100) + 'px';
+    tvIframe.style.height = (o.mesh.userData.screenH * 100) + 'px';
+  } else {
+    const v = ensureTvVideo();
+    v.src = p.src;
+    tvTexture = new THREE.VideoTexture(v);
+    tvTexture.colorSpace = THREE.SRGBColorSpace;
+    if (scr) {
+      scr.material.map = tvTexture;
+      scr.material.color.set(0xffffff);
+      scr.material.needsUpdate = true;
+    }
+    v.play().catch(() => showMsg('▶️ Нажми ещё раз, чтобы включить звук'));
+  }
+  showMsg('📺 Включено! C — выключить');
+}
+
+function setTvLink(o) {
+  const u = window.prompt('Ссылка на видео (YouTube или mp4):', o.url || '');
+  if (u === null) return;
+  const t = u.trim();
+  if (S.tvObj === o) stopTvScreen();
+  o.url = parseVideo(t) ? t : null;
+  showMsg(o.url ? '📺 Видео привязано к ТВ' : '🔗 Ссылка убрана');
+}
+
+function updateTvCss() {
+  const o = S.tvObj;
+  if (!o || !o.mesh.parent || !S.playing || S.driving) {
+    cssWrap.style.display = 'none';
+    return;
+  }
+  const scr = o.mesh.userData.screen;
+  if (!scr) { cssWrap.style.display = 'none'; return; }
+  _tvV1.setFromMatrixPosition(scr.matrixWorld);
+  const dist = _tvV1.distanceTo(camera.position);
+  _tvV2.set(0, 0, 1).transformDirection(scr.matrixWorld);
+  _tvV3.copy(_tvV1).sub(camera.position).normalize();
+  if (dist > 28 || _tvV2.dot(_tvV3) < 0.2) {
+    cssWrap.style.display = 'none';
+    return;
+  }
+  const w = window.innerWidth, h = window.innerHeight;
+  const focal = camera.projectionMatrix.elements[5] * (h / 2);
+  cssWrap.style.display = 'block';
+  cssWrap.style.width = w + 'px';
+  cssWrap.style.height = h + 'px';
+  cssInner.style.width = w + 'px';
+  cssInner.style.height = h + 'px';
+  cssInner.style.transform = 'perspective(' + focal + 'px) ' + cssCameraMatrix(camera.matrixWorldInverse) + 'translate(' + (w / 2) + 'px,' + (h / 2) + 'px)';
+  tvIframe.style.transform = cssObjectMatrix(scr.matrixWorld);
+}
+
+btnTvWatch.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const o = findAimed();
+  if (o && o.tv) watchTv(o);
+}, { passive: false });
+
+btnTvLink.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  const o = findAimed();
+  if (o && o.tv) setTvLink(o);
+}, { passive: false });
 
 // ---------- Backpack (inventory) ----------
 const bagOverlay = document.getElementById('bag-overlay');
@@ -2464,13 +2722,22 @@ function loop(now) {
       } else {
         updatePlayer(dt);
         const near = nearestCar();
+        const aim = near ? null : findAimed();
+        const tvAim = aim && aim.tv ? aim : null;
         if (near) {
           promptEl.textContent = IS_TOUCH ? '🚗 — сесть в машину' : 'E — сесть в машину';
+          promptEl.style.opacity = 1;
+        } else if (tvAim) {
+          promptEl.textContent = tvAim.url
+            ? (IS_TOUCH ? '📺 — смотреть · 🔗 — сменить' : 'C — смотреть · V — сменить ссылку')
+            : (IS_TOUCH ? '🔗 — вставить ссылку' : 'V — вставить ссылку (YouTube/mp4)');
           promptEl.style.opacity = 1;
         } else if (promptEl.style.opacity) {
           promptEl.style.opacity = 0;
         }
         btnCar.classList.toggle('nearest', !!near || !!S.driving);
+        btnTvWatch.classList.toggle('nearest', !!tvAim);
+        btnTvLink.classList.toggle('nearest', !!tvAim);
       }
       updatePhysics(dt);
       updateNPCs(dt);
@@ -2486,6 +2753,7 @@ function loop(now) {
   }
 
   renderer.render(scene, camera);
+  updateTvCss();
 }
 
 buildWorld('yard');
