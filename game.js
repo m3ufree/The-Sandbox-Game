@@ -1745,7 +1745,7 @@ function nukeDevastation(p, radius) {
     }
   }
   const scorch = new THREE.Mesh(
-    new THREE.CircleGeometry(radius * 0.55, 32),
+    new THREE.CircleGeometry(Math.min(radius * 0.55, 60), 32),
     new THREE.MeshBasicMaterial({ color: 0x14100c, transparent: true, opacity: 0.85 })
   );
   scorch.rotation.x = -Math.PI / 2;
@@ -1764,7 +1764,7 @@ function explode(obj) {
   panicPos.copy(p);
   panicT = 3;
   if (spec.nuke) {
-    nukeDevastation(p, spec.radius);
+    nukeDevastation(p, Math.hypot(GW * TILE, GH * TILE));
     return;
   }
   for (const n of [...npcs]) {
