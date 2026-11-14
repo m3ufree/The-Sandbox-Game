@@ -25,7 +25,7 @@ const hud = document.getElementById('hud');
 const mapnameEl = document.getElementById('mapname');
 const hintEl = document.getElementById('hint');
 const msgEl = document.getElementById('msg');
-const hotbarEl = document.getElementById('hotbar');
+const selnameEl = document.getElementById('selname');
 const menuOverlay = document.getElementById('menu-overlay');
 const pauseOverlay = document.getElementById('pause-overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
@@ -1313,23 +1313,10 @@ const BOMBS = {
   nuke: { radius: 45, impulse: 34, shake: 1.3, flash: 520, flashDist: 130, crime: 3, nuke: true },
 };
 
-function buildHotbar() {
-  hotbarEl.innerHTML = '';
-  CATALOG.forEach((def, i) => {
-    const slot = document.createElement('div');
-    slot.className = 'slot' + (i === S.sel ? ' sel' : '');
-    slot.innerHTML = `${def.icon}<span>${def.name}</span>`;
-    slot.addEventListener('pointerdown', (e) => {
-      e.preventDefault();
-      selectSlot(i);
-    });
-    hotbarEl.appendChild(slot);
-  });
-}
-
 function selectSlot(i) {
   S.sel = i;
-  [...hotbarEl.children].forEach((el, k) => el.classList.toggle('sel', k === i));
+  const def = CATALOG[i];
+  if (def) selnameEl.textContent = `${def.icon} ${def.name}`;
 }
 
 function spawnSelected() {
@@ -2501,8 +2488,8 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 
-buildHotbar();
 buildWorld('yard');
+selectSlot(0);
 
 camera.position.set(player.pos.x, EYE_HEIGHT, player.pos.z);
 camera.rotation.set(0, player.yaw, 0);

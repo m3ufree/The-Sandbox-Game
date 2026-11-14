@@ -62,6 +62,11 @@
     text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.45); padding: 6px 16px;
     border-left: 4px solid #d89628; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
+  #selname {
+    position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+    color: #d89628; font-size: 12px; letter-spacing: 0.1em; font-weight: 900; text-transform: uppercase;
+    text-shadow: 2px 2px 0 #000; white-space: nowrap;
+  }
   #hint {
     position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
     color: #9a948a; font-size: 11px; letter-spacing: 0.08em; font-weight: 700; font-family: 'Courier New', monospace;
@@ -87,17 +92,7 @@
     white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
 
-  #hotbar {
-    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
-    display: flex; gap: 6px; flex-wrap: wrap; justify-content: center; max-width: 96vw;
-  }
-  .slot {
-    width: 54px; height: 54px; background: rgba(0,0,0,0.55); border: 2px solid #2c2c2c;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    color: #b5afa5; font-size: 22px; pointer-events: auto; cursor: pointer; touch-action: none;
-  }
-  .slot span { font-size: 8px; letter-spacing: 0.04em; margin-top: 2px; font-weight: 900; font-family: Arial, sans-serif; }
-  .slot.sel { border-color: #d89628; background: rgba(216,150,40,0.25); color: #fff; }
+
 
   #crosshair {
     position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
@@ -159,11 +154,11 @@
 
 <div id="hud" class="hidden">
   <div id="mapname">ДВОР</div>
+  <div id="selname"></div>
   <div id="hint">ЛКМ — поставить · ПКМ/X — удалить · 1-8 — выбор · T — день/ночь</div>
   <div id="crosshair"></div>
   <div id="prompt"></div>
   <div id="msg"></div>
-  <div id="hotbar"></div>
 </div>
 
 <div id="menu-overlay" class="overlay">
@@ -273,6 +268,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=21"></script>
+<script type="module" src="game.js?v=22"></script>
 </body>
 </html>
