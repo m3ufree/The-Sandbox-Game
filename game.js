@@ -41,11 +41,6 @@ const rotateOverlay = document.getElementById('rotate-overlay');
 const joyBase = document.getElementById('joy-base');
 const joyKnob = document.getElementById('joy-knob');
 
-if (IS_TOUCH) {
-  document.body.classList.add('touch');
-  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));
-}
-
 // ---------- Game state ----------
 const S = {
   started: false, playing: false, dead: false, won: false,
@@ -58,7 +53,8 @@ const S = {
 
 // ---------- Renderer / scene ----------
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setPixelRatio(IS_TOUCH ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
+if (IS_TOUCH) document.body.classList.add('touch');
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
