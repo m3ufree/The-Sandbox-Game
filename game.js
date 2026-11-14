@@ -91,6 +91,11 @@ const MAPS = {
     wallColor: 0x37342f, wallH: 5.0, ground: 0x232325,
     fog: 0x060d05, fogD: 0.075, ambient: [0x2a3325, 0.2],
   },
+  village: {
+    name: 'Село Сулоаоу',
+    wallColor: 0x6b5138, wallH: 3.2, ground: 0x3d5230,
+    fog: 0x8f9789, fogD: 0.045, ambient: [0x99a8b0, 0.55],
+  },
 };
 
 const spawnTile = [1, 1];
@@ -175,13 +180,39 @@ function generateGrid(map) {
       const nearExit = Math.abs(i - exitTile[0]) < 3 && Math.abs(j - exitTile[1]) < 3;
       if (!nearSpawn && !nearExit && Math.random() < 0.34) grid[idx(i, j)] = 1;
     }
-  } else {
+  } else if (map === 'city') {
     for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
       if (i === 0 || j === 0 || i === GW - 1 || j === GH - 1) { grid[idx(i, j)] = 1; continue; }
       grid[idx(i, j)] = (i % 6 === 3 || j % 6 === 3) ? 0 : (Math.random() < 0.82 ? 1 : 0);
     }
     carveToStreet(spawnTile[0], spawnTile[1]);
     carveToStreet(exitTile[0], exitTile[1]);
+  } else if (map === 'village') {
+    grid.fill(0);
+    const houses = 9 + randInt(4);
+    for (let h = 0; h < houses; h++) {
+      const w = 3 + randInt(3), d = 3 + randInt(3);
+      const hi = 2 + randInt(GW - w - 4), hj = 2 + randInt(GH - d - 4);
+      for (let a = 0; a < w; a++) for (let b = 0; b < d; b++) {
+        const edge = a === 0 || b === 0 || a === w - 1 || b === d - 1;
+        if (edge || Math.random() < 0.5) grid[idx(hi + a, hj + b)] = 1;
+      }
+    }
+    for (let f = 0; f < 10; f++) {
+      const fi = 2 + randInt(GW - 8), fj = 2 + randInt(GH - 8);
+      const horiz = Math.random() < 0.5;
+      const len = 4 + randInt(4);
+      for (let a = 0; a < len; a++) {
+        const i = horiz ? fi + a : fi, j = horiz ? fj : fj + a;
+        if (i > 0 && j > 0 && i < GW - 1 && j < GH - 1) grid[idx(i, j)] = 1;
+      }
+    }
+    for (const [ti, tj] of [spawnTile, exitTile]) {
+      for (let a = -2; a <= 2; a++) for (let b = -2; b <= 2; b++) {
+        const i = ti + a, j = tj + b;
+        if (i > 0 && j > 0 && i < GW - 1 && j < GH - 1) grid[idx(i, j)] = 0;
+      }
+    }
   }
 
   let reach = bfsReach();
@@ -349,6 +380,42 @@ function addCityProps() {
   }
 }
 
+function addVillageProps() {
+  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 6);
+  spots.sort(() => Math.random() - 0.5);
+  const trunkGeo = new THREE.CylinderGeometry(0.22, 0.3, 2.6, 7);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3520, roughness: 1 });
+  const leafGeo = new THREE.ConeGeometry(1.6, 3.2, 8);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x2d4a22, roughness: 1 });
+  for (let k = 0; k < 8 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const ox = rand(-1, 1), oz = rand(-1, 1);
+    const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+    trunk.position.set(c.x + ox, 1.3, c.z + oz);
+    const leaf = new THREE.Mesh(leafGeo, leafMat);
+    leaf.position.set(c.x + ox, 3.8, c.z + oz);
+    worldGroup.add(trunk, leaf);
+  }
+  const hayGeo = new THREE.BoxGeometry(1.1, 1.0, 1.1);
+  const hayMat = new THREE.MeshStandardMaterial({ color: 0xb8963a, roughness: 1 });
+  for (let k = 8; k < 14 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const hay = new THREE.Mesh(hayGeo, hayMat);
+    hay.position.set(c.x + rand(-1, 1), 0.5, c.z + rand(-1, 1));
+    hay.rotation.y = rand(0, Math.PI);
+    worldGroup.add(hay);
+  }
+  if (spots.length > 14) {
+    const c = tileCenter(spots[14][0], spots[14][1]);
+    const well = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.9, 1.0, 0.9, 10),
+      new THREE.MeshStandardMaterial({ color: 0x7a7a76, roughness: 0.9 })
+    );
+    well.position.set(c.x, 0.45, c.z);
+    worldGroup.add(well);
+  }
+}
+
 function buildDoor() {
   doorGroup = new THREE.Group();
   const door = new THREE.Mesh(
@@ -436,6 +503,7 @@ function buildWorld(map) {
   flickerLights = [];
   if (map === 'yard') addYardProps();
   if (map === 'city') addCityProps();
+  if (map === 'village') addVillageProps();
   buildDoor();
   placeItems();
   scene.add(worldGroup);
@@ -445,6 +513,8 @@ function buildWorld(map) {
   ambient.color.setHex(cfg.ambient[0]);
   ambient.intensity = cfg.ambient[1];
 
+  monster.visible = map !== 'village';
+  goose.visible = map === 'village';
   monsterSpawn();
   player.pos.copy(tileCenter(spawnTile[0], spawnTile[1]));
   player.pos.y = EYE_HEIGHT;
@@ -495,6 +565,56 @@ const monster = new THREE.Group();
 }
 scene.add(monster);
 
+const goose = new THREE.Group();
+{
+  const white = new THREE.MeshStandardMaterial({ color: 0xe8e6e0, roughness: 0.8 });
+  const orange = new THREE.MeshStandardMaterial({ color: 0xe8801a, roughness: 0.6 });
+  const black = new THREE.MeshBasicMaterial({ color: 0x0a0a0a });
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.45, 12, 10), white);
+  body.scale.set(1, 0.8, 1.4);
+  body.position.y = 0.75;
+  goose.add(body);
+  const tail = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.5, 8), white);
+  tail.rotation.x = -Math.PI / 2.3;
+  tail.position.set(0, 0.85, -0.75);
+  goose.add(tail);
+  const neck = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.13, 0.95, 8), white);
+  neck.position.set(0, 1.32, 0.42);
+  neck.rotation.x = 0.3;
+  goose.add(neck);
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 10, 8), white);
+  head.position.set(0, 1.8, 0.56);
+  goose.add(head);
+  const beakU = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.32, 8), orange);
+  beakU.rotation.x = Math.PI / 2;
+  beakU.position.set(0, 1.78, 0.8);
+  goose.add(beakU);
+  const eyeGeo = new THREE.SphereGeometry(0.045, 8, 8);
+  const eyeL = new THREE.Mesh(eyeGeo, black);
+  eyeL.position.set(-0.11, 1.86, 0.64);
+  const eyeR = new THREE.Mesh(eyeGeo, black);
+  eyeR.position.set(0.11, 1.86, 0.64);
+  goose.add(eyeL, eyeR);
+  const wingGeo = new THREE.BoxGeometry(0.1, 0.42, 0.8);
+  const wingL = new THREE.Mesh(wingGeo, white);
+  wingL.position.set(-0.48, 0.85, 0);
+  const wingR = new THREE.Mesh(wingGeo, white);
+  wingR.position.set(0.48, 0.85, 0);
+  goose.add(wingL, wingR);
+  const footGeo = new THREE.BoxGeometry(0.18, 0.06, 0.35);
+  const footL = new THREE.Mesh(footGeo, orange);
+  footL.position.set(-0.16, 0.05, 0.05);
+  const footR = new THREE.Mesh(footGeo, orange);
+  footR.position.set(0.16, 0.05, 0.05);
+  goose.add(footL, footR);
+  goose.userData.wings = [wingL, wingR];
+  goose.scale.setScalar(1.5);
+}
+goose.visible = false;
+scene.add(goose);
+
+const enemyMesh = () => (S.map === 'village' ? goose : monster);
+
 const M = {
   pos: new THREE.Vector3(), state: 'roam', path: null, pathIndex: 0,
   repathTimer: 0, chaseTimer: 0, farTimer: 0, lastKnown: null, walkPhase: 0,
@@ -512,12 +632,13 @@ function monsterSpawn() {
   M.state = 'roam';
   M.path = null;
   M.lastKnown = null;
-  monster.position.copy(M.pos);
+  enemyMesh().position.copy(M.pos);
 }
 
 function monsterSpeed() {
-  if (M.state === 'chase') return 4.4 + S.fuses * 0.3;
-  if (M.state === 'hunt') return 3.2 + S.fuses * 0.15;
+  const bonus = S.map === 'village' ? 0.4 : 0;
+  if (M.state === 'chase') return 4.4 + S.fuses * 0.3 + bonus;
+  if (M.state === 'hunt') return 3.2 + S.fuses * 0.15 + bonus;
   return 2.1;
 }
 
@@ -538,7 +659,10 @@ function updateMonster(dt) {
   const sees = dist < detect && losTiles(mt[0], mt[1], pt[0], pt[1]);
 
   if (sees) {
-    if (M.state !== 'chase') playGrowl();
+    if (M.state !== 'chase') {
+      if (S.map === 'village') { playHonk(1); setTimeout(() => playHonk(0.85), 260); }
+      else playGrowl();
+    }
     M.state = 'chase';
     M.chaseTimer = 4;
     M.lastKnown = [pt[0], pt[1]];
@@ -568,7 +692,7 @@ function updateMonster(dt) {
     else {
       dir.normalize();
       M.pos.addScaledVector(dir, monsterSpeed() * dt);
-      monster.rotation.y = Math.atan2(dir.x, dir.z);
+      enemyMesh().rotation.y = Math.atan2(dir.x, dir.z);
       M.walkPhase += dt * monsterSpeed() * 2.2;
     }
   }
@@ -590,13 +714,24 @@ function updateMonster(dt) {
     }
   } else M.farTimer = 0;
 
-  monster.position.copy(M.pos);
-  monster.position.y = Math.abs(Math.sin(M.walkPhase)) * 0.12;
+  const em = enemyMesh();
+  em.position.copy(M.pos);
+  if (S.map === 'village') {
+    em.position.y = Math.abs(Math.sin(M.walkPhase * 1.4)) * 0.14;
+    em.rotation.z = Math.sin(M.walkPhase * 1.4) * 0.08;
+    const flap = M.state === 'chase' ? Math.sin(S.time * 22) * 0.75 : Math.sin(S.time * 4) * 0.08;
+    goose.userData.wings[0].rotation.z = 0.15 + flap;
+    goose.userData.wings[1].rotation.z = -0.15 - flap;
+  } else {
+    em.position.y = Math.abs(Math.sin(M.walkPhase)) * 0.12;
+  }
 
   if (dist < 1.1 && S.deathTimer < 0) {
     S.deathTimer = 0;
+    jumpscareEl.classList.toggle('goose', S.map === 'village');
     jumpscareEl.classList.add('on');
-    playScream();
+    if (S.map === 'village') { playHonk(1.3); setTimeout(() => playHonk(1.15), 200); setTimeout(() => playHonk(0.95), 420); }
+    else playScream();
   }
 }
 
@@ -1023,6 +1158,25 @@ function playScream() {
   src.start(t); src.stop(t + 1.1);
 }
 
+function playHonk(pitch = 1) {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(430 * pitch, t);
+  o.frequency.exponentialRampToValueAtTime(290 * pitch, t + 0.22);
+  const f = AC.createBiquadFilter();
+  f.type = 'bandpass';
+  f.frequency.value = 850;
+  f.Q.value = 2;
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.001, t);
+  g.gain.exponentialRampToValueAtTime(0.3, t + 0.03);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.26);
+  o.connect(f); f.connect(g); g.connect(master);
+  o.start(t); o.stop(t + 0.28);
+}
+
 function playChew() {
   if (!AC) return;
   const t = AC.currentTime;
@@ -1157,9 +1311,10 @@ function updateEating(dt) {
 
   const dir = M.pos.clone().sub(player.pos); dir.y = 0;
   if (dir.length() > 1.05) M.pos.addScaledVector(dir.normalize(), 2.5 * dt);
-  monster.position.set(M.pos.x, Math.sin(t * 13) * 0.1, M.pos.z);
-  monster.rotation.y = Math.atan2(player.pos.x - M.pos.x, player.pos.z - M.pos.z);
-  monster.rotation.x = 0.45 + Math.sin(t * 13) * 0.28;
+  const em = enemyMesh();
+  em.position.set(M.pos.x, Math.sin(t * 13) * 0.1, M.pos.z);
+  em.rotation.y = Math.atan2(player.pos.x - M.pos.x, player.pos.z - M.pos.z);
+  em.rotation.x = 0.45 + Math.sin(t * 13) * 0.28;
 
   camera.position.set(
     player.pos.x + rand(-1, 1) * 0.06,
@@ -1172,7 +1327,11 @@ function updateEating(dt) {
   damageFlash.style.opacity = clamp(t / 2.2, 0, 0.85).toFixed(2);
 
   S.chewT -= dt;
-  if (S.chewT <= 0) { S.chewT = rand(0.32, 0.55); playChew(); }
+  if (S.chewT <= 0) {
+    S.chewT = rand(0.32, 0.55);
+    if (S.map === 'village') playHonk(rand(0.8, 1.3));
+    else playChew();
+  }
   updateHeartbeat(0.32);
 }
 
@@ -1184,7 +1343,7 @@ function die() {
   const secs = Math.round(S.time);
   setTimeout(() => {
     document.exitPointerLock();
-    deathOverlay.querySelector('h1').textContent = 'ОН СЪЕЛ ТЕБЯ';
+    deathOverlay.querySelector('h1').textContent = S.map === 'village' ? 'ГУСЬ ТЕБЯ ЗАКЛЕВАЛ' : 'ОН СЪЕЛ ТЕБЯ';
     deathStats.textContent = `Карта: ${MAPS[S.map].name} · Предохранители: ${S.fuses}/${FUSE_COUNT} · Время: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     deathOverlay.classList.remove('hidden');
     hud.classList.add('hidden');
@@ -1207,7 +1366,7 @@ function loop(now) {
       if (S.deathTimer < 0.85) {
         const dir = M.pos.clone().sub(camera.position); dir.y = 0;
         if (dir.length() > 0.4) M.pos.addScaledVector(dir.normalize(), 9 * dt);
-        monster.position.copy(M.pos);
+        enemyMesh().position.copy(M.pos);
         camera.rotation.set(0, Math.atan2(dir.x, dir.z) + Math.PI, 0);
         if (S.deathTimer >= 0.84) startEating();
       } else {
