@@ -6,7 +6,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.m
 
 const TILE = 4;
 const COLS = 14, ROWS = 14;
-const GW = COLS * 2 + 1, GH = ROWS * 2 + 1;
+let GW = COLS * 2 + 1, GH = ROWS * 2 + 1;
 
 const PLAYER_WALK = 4.2;
 const PLAYER_SPRINT = 7.0;
@@ -83,6 +83,7 @@ function makeGroundTexture(map) {
     forest: ['#24331d', ['#2c3e23', '#1c2917']],
     city: ['#26262a', ['#2d2d32', '#1f1f23']],
     village: ['#3d5230', ['#48603a', '#33452a']],
+    world: ['#3d5230', ['#48603a', '#33452a']],
   };
   const [base, vars] = cfgs[map] || cfgs.yard;
   return canvasTexture(128, (ctx, s) => {
@@ -144,11 +145,16 @@ const MAPS = {
     name: 'Село Сулоаоу', wallColor: 0x6b5138, wallH: 3.2, ground: 0x3d5230,
     fog: 0x0a0d08, fogD: 0.055, dayFog: 0xa8b0a0, ambient: [0x3a4030, 0.3],
   },
+  world: {
+    name: 'Открытый мир', wallColor: 0x4a4642, wallH: 3.0, ground: 0x3d5230,
+    fog: 0x0a0d08, fogD: 0.032, dayFog: 0xa8b0a0, ambient: [0x3a4030, 0.3],
+  },
 };
 
 const spawnTile = [1, 1];
 
-const grid = new Uint8Array(GW * GH);
+let grid = new Uint8Array(GW * GH);
+let activeSpawn = spawnTile;
 const idx = (i, j) => j * GW + i;
 const isWall = (i, j) => (i < 0 || j < 0 || i >= GW || j >= GH) ? true : grid[idx(i, j)] !== 0;
 let floors = [];
@@ -196,7 +202,7 @@ function carveToStreet(i, j) {
 
 function bfsReach() {
   const reach = new Uint8Array(GW * GH);
-  const q = [idx(spawnTile[0], spawnTile[1])];
+  const q = [idx(activeSpawn[0], activeSpawn[1])];
   reach[q[0]] = 1;
   let head = 0;
   while (head < q.length) {
@@ -214,7 +220,35 @@ function bfsReach() {
   return reach;
 }
 
+function zoneOf(i, j, map) {
+  if (map !== 'world') return map;
+  return i <= 30 ? (j <= 30 ? 'yard' : 'city') : (j <= 30 ? 'forest' : 'village');
+}
+
+function placeHouse(hi, hj, w, d) {
+  if (hi < 2 || hj < 2 || hi + w >= GW - 2 || hj + d >= GH - 2) return;
+  let clear = true;
+  for (let a = -1; a <= w && clear; a++) for (let b = -1; b <= d; b++) {
+    if (grid[idx(hi + a, hj + b)] !== 0) { clear = false; break; }
+  }
+  if (!clear) return;
+  for (let a = 0; a < w; a++) for (let b = 0; b < d; b++) {
+    const edge = a === 0 || b === 0 || a === w - 1 || b === d - 1;
+    grid[idx(hi + a, hj + b)] = edge ? 2 : 0;
+  }
+  const door = Math.floor(w / 2);
+  grid[idx(hi + door, hj + d - 1)] = 0;
+  houseRects.push({ hi, hj, w, d, door });
+}
+
 function generateGrid(map) {
+  const stdW = COLS * 2 + 1;
+  if (GW !== stdW || GH !== stdW || grid.length !== stdW * stdW) {
+    GW = stdW;
+    GH = stdW;
+    grid = new Uint8Array(GW * GH);
+  }
+  activeSpawn = map === 'world' ? [30, 30] : spawnTile;
   grid.fill(1);
   houseRects.length = 0;
   if (map === 'yard') {
@@ -267,6 +301,45 @@ function generateGrid(map) {
       const i = spawnTile[0] + a, j = spawnTile[1] + b;
       if (i > 0 && j > 0 && i < GW - 1 && j < GH - 1) grid[idx(i, j)] = 0;
     }
+  } else if (map === 'world') {
+    GW = GH = 61;
+    grid = new Uint8Array(GW * GH);
+    grid.fill(1);
+    for (let k = 1; k < GH - 1; k++) { grid[idx(30, k)] = 0; grid[idx(31, k)] = 0; }
+    for (let k = 1; k < GW - 1; k++) { grid[idx(k, 30)] = 0; grid[idx(k, 31)] = 0; }
+
+    generateMaze();
+    for (let j = 1; j < 30; j++) for (let i = 1; i < 30; i++) {
+      if (grid[idx(i, j)] === 1 && ((i % 2 === 0) !== (j % 2 === 0)) && Math.random() < 0.42) grid[idx(i, j)] = 0;
+    }
+
+    for (let j = 1; j < 30; j++) for (let i = 32; i < 60; i++) {
+      const nearSpawn = Math.abs(i - 30) < 4 && Math.abs(j - 30) < 4;
+      if (!nearSpawn && Math.random() < 0.34) grid[idx(i, j)] = 1;
+    }
+
+    for (let j = 32; j < 60; j++) for (let i = 1; i < 30; i++) {
+      grid[idx(i, j)] = ((i % 6) === 3 || (j % 6) === 3) ? 0 : (Math.random() < 0.82 ? 1 : 0);
+    }
+
+    for (let j = 32; j < 60; j++) for (let i = 32; i < 60; i++) grid[idx(i, j)] = 0;
+    const houses = 10 + randInt(4);
+    for (let h = 0; h < houses; h++) {
+      placeHouse(33 + randInt(24), 33 + randInt(24), 3 + randInt(3), 3 + randInt(3));
+    }
+    for (let f = 0; f < 12; f++) {
+      const fi = 33 + randInt(22), fj = 33 + randInt(22);
+      const horiz = Math.random() < 0.5;
+      const len = 4 + randInt(4);
+      for (let a = 0; a < len; a++) {
+        const i = horiz ? fi + a : fi, j = horiz ? fj : fj + a;
+        if (i < GW - 1 && j < GH - 1 && grid[idx(i, j)] === 0) grid[idx(i, j)] = 3;
+      }
+    }
+
+    for (let a = -3; a <= 3; a++) for (let b = -3; b <= 3; b++) {
+      grid[idx(30 + a, 30 + b)] = 0;
+    }
   }
 
   const reach = bfsReach();
@@ -313,81 +386,83 @@ function applyAtmosphere() {
 }
 
 function buildWalls(cfg, map) {
-  const wallTiles = [], fenceTiles = [];
+  const zoneTiles = { yard: [], forest: [], city: [], village: [] };
+  const fenceTiles = [];
   for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
     const v = grid[idx(i, j)];
-    if (v === 1) wallTiles.push([i, j]);
+    if (v === 1) zoneTiles[zoneOf(i, j, map)].push([i, j]);
     else if (v === 3) fenceTiles.push([i, j]);
   }
+  if (zoneTiles.forest.length) buildForestTrees(zoneTiles.forest);
+  if (zoneTiles.yard.length) buildYardWalls(zoneTiles.yard);
+  if (zoneTiles.city.length) buildCityBuildings(zoneTiles.city);
+  if (fenceTiles.length) buildFences(fenceTiles);
+}
 
-  if (map === 'forest') {
-    const trunkGeo = new THREE.CylinderGeometry(0.32, 0.45, cfg.wallH, 7);
-    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 });
-    const leafGeo = new THREE.ConeGeometry(1.7, 2.6, 8);
-    const leaf2Geo = new THREE.ConeGeometry(1.25, 2.2, 8);
-    const leafMat = new THREE.MeshStandardMaterial({ color: 0x1b3a1e, roughness: 1 });
-    const leaf2Mat = new THREE.MeshStandardMaterial({ color: 0x234a24, roughness: 1 });
-    const n = wallTiles.length;
-    const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
-    const leaves = new THREE.InstancedMesh(leafGeo, leafMat, n);
-    const leaves2 = new THREE.InstancedMesh(leaf2Geo, leaf2Mat, n);
-    const m = new THREE.Matrix4();
-    const q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
-    wallTiles.forEach(([i, j], k) => {
-      const c = tileCenter(i, j);
-      const ox = rand(-1.0, 1.0), oz = rand(-1.0, 1.0);
-      const s = rand(0.8, 1.35);
-      e.set(0, rand(0, Math.PI * 2), 0);
-      q.setFromEuler(e);
-      sc.set(s, s, s);
-      p.set(c.x + ox, (cfg.wallH / 2) * s, c.z + oz);
-      m.compose(p, q, sc); trunks.setMatrixAt(k, m);
-      p.set(c.x + ox, cfg.wallH * s + 0.9 * s, c.z + oz);
-      m.compose(p, q, sc); leaves.setMatrixAt(k, m);
-      p.set(c.x + ox, cfg.wallH * s + 2.1 * s, c.z + oz);
-      m.compose(p, q, sc); leaves2.setMatrixAt(k, m);
+function buildForestTrees(wallTiles) {
+  const cfg = MAPS.forest;
+  const trunkGeo = new THREE.CylinderGeometry(0.32, 0.45, cfg.wallH, 7);
+  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 });
+  const leafGeo = new THREE.ConeGeometry(1.7, 2.6, 8);
+  const leaf2Geo = new THREE.ConeGeometry(1.25, 2.2, 8);
+  const leafMat = new THREE.MeshStandardMaterial({ color: 0x1b3a1e, roughness: 1 });
+  const leaf2Mat = new THREE.MeshStandardMaterial({ color: 0x234a24, roughness: 1 });
+  const n = wallTiles.length;
+  const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, n);
+  const leaves = new THREE.InstancedMesh(leafGeo, leafMat, n);
+  const leaves2 = new THREE.InstancedMesh(leaf2Geo, leaf2Mat, n);
+  const m = new THREE.Matrix4();
+  const q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), p = new THREE.Vector3();
+  wallTiles.forEach(([i, j], k) => {
+    const c = tileCenter(i, j);
+    const ox = rand(-1.0, 1.0), oz = rand(-1.0, 1.0);
+    const s = rand(0.8, 1.35);
+    e.set(0, rand(0, Math.PI * 2), 0);
+    q.setFromEuler(e);
+    sc.set(s, s, s);
+    p.set(c.x + ox, (cfg.wallH / 2) * s, c.z + oz);
+    m.compose(p, q, sc); trunks.setMatrixAt(k, m);
+    p.set(c.x + ox, cfg.wallH * s + 0.9 * s, c.z + oz);
+    m.compose(p, q, sc); leaves.setMatrixAt(k, m);
+    p.set(c.x + ox, cfg.wallH * s + 2.1 * s, c.z + oz);
+    m.compose(p, q, sc); leaves2.setMatrixAt(k, m);
+  });
+  worldGroup.add(trunks, leaves, leaves2);
+}
+
+function buildYardWalls(wallTiles) {
+  const cfg = MAPS.yard;
+  const wallGeo = new THREE.BoxGeometry(TILE, cfg.wallH, TILE);
+  const wallMat = new THREE.MeshStandardMaterial({ map: makeWallTexture(), roughness: 0.95 });
+  const walls = new THREE.InstancedMesh(wallGeo, wallMat, wallTiles.length);
+  const m = new THREE.Matrix4();
+  wallTiles.forEach(([i, j], n2) => {
+    m.setPosition((i + 0.5) * TILE, cfg.wallH / 2, (j + 0.5) * TILE);
+    walls.setMatrixAt(n2, m);
+  });
+  worldGroup.add(walls);
+}
+
+function buildCityBuildings(wallTiles) {
+  const buckets = [[], [], []];
+  wallTiles.forEach(t => buckets[randInt(3)].push(t));
+  const heights = [5, 8.5, 12.5];
+  const m = new THREE.Matrix4();
+  buckets.forEach((tiles, b) => {
+    if (!tiles.length) return;
+    const h = heights[b];
+    const facTex = makeFacadeTexture(b);
+    facTex.repeat.set(2, Math.max(2, Math.round(h / 2.4)));
+    const facMat = new THREE.MeshStandardMaterial({ map: facTex, roughness: 0.9 });
+    const roofMat = new THREE.MeshStandardMaterial({ color: 0x1d1d20, roughness: 1 });
+    const geo = new THREE.BoxGeometry(TILE, h, TILE);
+    const mesh = new THREE.InstancedMesh(geo, [facMat, facMat, roofMat, roofMat, facMat, facMat], tiles.length);
+    tiles.forEach(([i, j], n2) => {
+      m.setPosition((i + 0.5) * TILE, h / 2, (j + 0.5) * TILE);
+      mesh.setMatrixAt(n2, m);
     });
-    worldGroup.add(trunks, leaves, leaves2);
-    return;
-  }
-
-  if (map === 'yard') {
-    const wallGeo = new THREE.BoxGeometry(TILE, cfg.wallH, TILE);
-    const wallMat = new THREE.MeshStandardMaterial({ map: makeWallTexture(), roughness: 0.95 });
-    const walls = new THREE.InstancedMesh(wallGeo, wallMat, wallTiles.length);
-    const m = new THREE.Matrix4();
-    wallTiles.forEach(([i, j], n2) => {
-      m.setPosition((i + 0.5) * TILE, cfg.wallH / 2, (j + 0.5) * TILE);
-      walls.setMatrixAt(n2, m);
-    });
-    worldGroup.add(walls);
-    return;
-  }
-
-  if (map === 'city') {
-    const buckets = [[], [], []];
-    wallTiles.forEach(t => buckets[randInt(3)].push(t));
-    const heights = [5, 8.5, 12.5];
-    const m = new THREE.Matrix4();
-    buckets.forEach((tiles, b) => {
-      if (!tiles.length) return;
-      const h = heights[b];
-      const facTex = makeFacadeTexture(b);
-      facTex.repeat.set(2, Math.max(2, Math.round(h / 2.4)));
-      const facMat = new THREE.MeshStandardMaterial({ map: facTex, roughness: 0.9 });
-      const roofMat = new THREE.MeshStandardMaterial({ color: 0x1d1d20, roughness: 1 });
-      const geo = new THREE.BoxGeometry(TILE, h, TILE);
-      const mesh = new THREE.InstancedMesh(geo, [facMat, facMat, roofMat, roofMat, facMat, facMat], tiles.length);
-      tiles.forEach(([i, j], n2) => {
-        m.setPosition((i + 0.5) * TILE, h / 2, (j + 0.5) * TILE);
-        mesh.setMatrixAt(n2, m);
-      });
-      worldGroup.add(mesh);
-    });
-    return;
-  }
-
-  if (map === 'village') buildFences(fenceTiles);
+    worldGroup.add(mesh);
+  });
 }
 
 function buildFences(tiles) {
@@ -418,8 +493,10 @@ function buildFences(tiles) {
   }
 }
 
-function addYardProps() {
-  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 8);
+function addYardProps(zone) {
+  const spots = floors.filter(([i, j]) =>
+    zoneOf(i, j, zone) === zone && Math.abs(i - activeSpawn[0]) + Math.abs(j - activeSpawn[1]) > 8
+  );
   spots.sort(() => Math.random() - 0.5);
   for (let k = 0; k < 6 && k < spots.length; k++) {
     const c = tileCenter(spots[k][0], spots[k][1]);
@@ -437,8 +514,10 @@ function addYardProps() {
   }
 }
 
-function addCityProps() {
-  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 8);
+function addCityProps(zone) {
+  const spots = floors.filter(([i, j]) =>
+    zoneOf(i, j, zone) === zone && Math.abs(i - activeSpawn[0]) + Math.abs(j - activeSpawn[1]) > 8
+  );
   spots.sort(() => Math.random() - 0.5);
   const toxicMat = new THREE.MeshStandardMaterial({ color: 0x1e3320, emissive: 0x2fbf2f, emissiveIntensity: 0.4, roughness: 0.6 });
   for (let k = 0; k < 8 && k < spots.length; k++) {
@@ -457,10 +536,10 @@ function addCityProps() {
   }
 }
 
-function addVillageProps() {
+function addVillageProps(zone) {
   const inHouse = (i, j) => houseRects.some(r => i >= r.hi && i < r.hi + r.w && j >= r.hj && j < r.hj + r.d);
   const spots = floors.filter(([i, j]) =>
-    Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 6 && !inHouse(i, j)
+    zoneOf(i, j, zone) === zone && Math.abs(i - activeSpawn[0]) + Math.abs(j - activeSpawn[1]) > 6 && !inHouse(i, j)
   );
   spots.sort(() => Math.random() - 0.5);
   for (let k = 0; k < 8 && k < spots.length; k++) {
@@ -624,10 +703,10 @@ function buildWorld(map) {
   worldGroup.add(ground);
 
   buildWalls(cfg, map);
-  if (map === 'village') buildVillageHouses();
-  if (map === 'yard') addYardProps();
-  if (map === 'city') addCityProps();
-  if (map === 'village') addVillageProps();
+  if (map === 'village' || map === 'world') buildVillageHouses();
+  if (map === 'yard' || map === 'world') addYardProps(map);
+  if (map === 'city' || map === 'world') addCityProps(map);
+  if (map === 'village' || map === 'world') addVillageProps(map);
 
   spawnedGroup = new THREE.Group();
   worldGroup.add(spawnedGroup);
@@ -638,7 +717,7 @@ function buildWorld(map) {
   scene.background = new THREE.Color(cfg.fog);
   applyAtmosphere();
 
-  player.pos.copy(tileCenter(spawnTile[0], spawnTile[1]));
+  player.pos.copy(tileCenter(activeSpawn[0], activeSpawn[1]));
   player.pos.y = EYE_HEIGHT;
   player.yaw = Math.PI * 0.75;
   player.pitch = 0;
@@ -646,7 +725,8 @@ function buildWorld(map) {
 
   for (const n of [...npcs]) removeNPC(n);
   crimes = 0;
-  for (let k = 0; k < 8; k++) spawnCiv();
+  const civCount = map === 'world' ? 16 : 8;
+  for (let k = 0; k < civCount; k++) spawnCiv();
 }
 
 // ---------- Player ----------
@@ -1913,7 +1993,7 @@ function updateCiv(n, dt) {
 function arrest() {
   arrestCd = 6;
   if (S.driving) exitCar();
-  player.pos.copy(tileCenter(spawnTile[0], spawnTile[1]));
+  player.pos.copy(tileCenter(activeSpawn[0], activeSpawn[1]));
   player.pos.y = EYE_HEIGHT;
   player.vy = 0;
   player.onGround = true;
