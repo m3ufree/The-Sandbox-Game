@@ -576,6 +576,63 @@ function addVillageProps(zone) {
 const HOUSE_WALLS = [0xcfc3a8, 0xb8c0a8, 0xc9a88a, 0xb0a494, 0xd8cdb4];
 const ROOF_COLS = [0x6b3a2e, 0x4a4a52, 0x5a4632, 0x3e4a3e];
 
+function addHouseFurniture(g, r) {
+  const W = r.w * TILE, D = r.d * TILE;
+  const woodM = new THREE.MeshStandardMaterial({ color: 0x7a5a34, roughness: 0.85 });
+  const darkM = new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.9 });
+  const clothM = new THREE.MeshStandardMaterial({ color: 0xb8b2a4, roughness: 1 });
+  const rugCols = [0x8a4a3a, 0x3a6a4a, 0x4a5a8a];
+  const rug = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.03, 1.6), new THREE.MeshStandardMaterial({ color: rugCols[randInt(3)], roughness: 1 }));
+  rug.position.set(0.2, 0.135, 0.6);
+  g.add(rug);
+  const table = new THREE.Group();
+  const ttop = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.08, 0.9), woodM);
+  ttop.position.y = 0.78;
+  table.add(ttop);
+  for (const [lx, lz] of [[-0.6, -0.35], [0.6, -0.35], [-0.6, 0.35], [0.6, 0.35]]) {
+    const leg = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.78, 0.09), darkM);
+    leg.position.set(lx, 0.39, lz);
+    table.add(leg);
+  }
+  table.position.set(0.2, 0.12, 0.7);
+  g.add(table);
+  const stoolG = new THREE.CylinderGeometry(0.24, 0.2, 0.5, 10);
+  const st1 = new THREE.Mesh(stoolG, darkM);
+  st1.position.set(-1.3, 0.37, 1.1);
+  const st2 = new THREE.Mesh(stoolG, darkM);
+  st2.position.set(1.5, 0.37, 0.7);
+  g.add(st1, st2);
+  const bed = new THREE.Group();
+  const frame = new THREE.Mesh(new THREE.BoxGeometry(1.15, 0.35, 2.15), darkM);
+  frame.position.y = 0.18;
+  const matt = new THREE.Mesh(new THREE.BoxGeometry(1.05, 0.18, 2.0), clothM);
+  matt.position.y = 0.44;
+  const pillow = new THREE.Mesh(new THREE.BoxGeometry(0.75, 0.14, 0.42), new THREE.MeshStandardMaterial({ color: 0xe8e2d4, roughness: 1 }));
+  pillow.position.set(0, 0.56, -0.72);
+  const blanket = new THREE.Mesh(new THREE.BoxGeometry(1.07, 0.06, 1.2), new THREE.MeshStandardMaterial({ color: 0x7a3a3a, roughness: 1 }));
+  blanket.position.set(0, 0.55, 0.35);
+  bed.add(frame, matt, pillow, blanket);
+  bed.position.set(-1.3, 0.12, -0.9);
+  g.add(bed);
+  const night = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.5, 0.45), woodM);
+  night.position.set(0.3, 0.37, -1.55);
+  g.add(night);
+  const shelf = new THREE.Group();
+  for (const sy of [0.5, 1.0, 1.5]) {
+    const sh = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.06, 0.35), woodM);
+    sh.position.y = sy;
+    shelf.add(sh);
+  }
+  for (const sx of [-0.78, 0.78]) {
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.07, 1.6, 0.35), darkM);
+    side.position.set(sx, 1.0, 0);
+    shelf.add(side);
+  }
+  shelf.rotation.y = Math.PI / 2;
+  shelf.position.set(W / 2 - 4.25, 0.12, -0.3);
+  g.add(shelf);
+}
+
 function buildVillageHouses() {
   const winGeo = new THREE.BoxGeometry(0.95, 1.05, 0.1);
   const frameGeo = new THREE.BoxGeometry(1.15, 1.25, 0.08);
@@ -688,6 +745,7 @@ function buildVillageHouses() {
     addWin(-W / 4, -D / 2 - 0.06, 0);
     if (W > 7) addWin(W / 4, -D / 2 - 0.06, 0);
 
+    addHouseFurniture(g, r);
     g.position.set((r.hi + r.w / 2) * TILE, 0, (r.hj + r.d / 2) * TILE);
     worldGroup.add(g);
   }
@@ -740,6 +798,7 @@ function buildWorld(map) {
 }
 
 // ---------- Player ----------
+const _sitV = new THREE.Vector3();
 const player = {
   pos: new THREE.Vector3((spawnTile[0] + 0.5) * TILE, EYE_HEIGHT, (spawnTile[1] + 0.5) * TILE),
   yaw: Math.PI * 0.75, pitch: 0,
@@ -828,6 +887,7 @@ document.getElementById('btn-pause').addEventListener('touchstart', (e) => {
 }, { passive: false });
 
 document.getElementById('btn-spawn').addEventListener('touchstart', (e) => {
+  if (S.sitting) { e.preventDefault(); e.stopPropagation(); standUp(); return; }
   e.preventDefault();
   if (S.playing) spawnSelected();
 }, { passive: false });
@@ -869,6 +929,12 @@ function checkOrientation() {
 const keys = {};
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
+  if (S.sitting) {
+    if (e.code === 'KeyC') sleepNow();
+    if (e.code === 'Space') standUp();
+    if (['Space', 'KeyW', 'KeyA', 'KeyS', 'KeyD'].includes(e.code)) e.preventDefault();
+    return;
+  }
   if (e.code === 'KeyB' && S.started && !S.driving) { if (S.bagOpen) closeBag(); else openBag(); return; }
   if (!S.playing) return;
   if (e.code === 'KeyF') toggleFlashlight();
@@ -878,6 +944,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyV' || e.code === 'KeyC') {
     const o = findAimed();
     if (o && o.tv) { if (e.code === 'KeyV') setTvLink(o); else watchTv(o); }
+    else if (o && o.seat && e.code === 'KeyC') sitOn(o);
     else if (o && o.console && e.code === 'KeyC') {
       const tv = nearestTvTo(o);
       if (tv) watchTv(tv);
@@ -897,7 +964,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mousedown', (e) => {
-  if (!S.playing || S.driving) return;
+  if (!S.playing || S.driving || S.tvObj || S.sitting) return;
   if (e.button === 0) spawnSelected();
   if (e.button === 2) deleteAimed();
 });
@@ -924,6 +991,23 @@ function forwardFlat() {
 }
 
 function updatePlayer(dt) {
+  if (S.sitting) {
+    const s = S.sitting;
+    if (!s.mesh.parent) {
+      S.sitting = null;
+      player.pos.y = EYE_HEIGHT;
+      player.onGround = true;
+    } else {
+      _sitV.set(0, 1.15, -0.05);
+      s.mesh.localToWorld(_sitV);
+      player.pos.copy(_sitV);
+      player.yaw = s.mesh.rotation.y + Math.PI;
+      player.onGround = true;
+      player.vy = 0;
+      camera.position.set(_sitV.x, _sitV.y, _sitV.z);
+      return;
+    }
+  }
   const joyActive = touchInput.moveId !== null;
   const fwd = joyActive ? -touchInput.moveZ : ((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0));
   const strafe = joyActive ? touchInput.moveX : ((keys['KeyD'] ? 1 : 0) - (keys['KeyA'] ? 1 : 0));
@@ -1458,6 +1542,36 @@ function buildConnector() {
   return g;
 }
 
+function buildSofa() {
+  const g = new THREE.Group();
+  const fabric = new THREE.MeshStandardMaterial({ color: 0x9a4a3a, roughness: 1 });
+  const fabricDark = new THREE.MeshStandardMaterial({ color: 0x7a382c, roughness: 1 });
+  const legM = new THREE.MeshStandardMaterial({ color: 0x4a3826, roughness: 0.9 });
+  const base = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.35, 0.85), fabric);
+  base.position.y = 0.3;
+  const back = new THREE.Mesh(new THREE.BoxGeometry(1.9, 0.6, 0.25), fabricDark);
+  back.position.set(0, 0.75, 0.3);
+  const armG = new THREE.BoxGeometry(0.26, 0.6, 0.85);
+  const arm1 = new THREE.Mesh(armG, fabricDark);
+  arm1.position.set(-0.95, 0.55, 0);
+  const arm2 = new THREE.Mesh(armG, fabricDark);
+  arm2.position.set(0.95, 0.55, 0);
+  const cushG = new THREE.BoxGeometry(0.78, 0.16, 0.68);
+  const cu1 = new THREE.Mesh(cushG, fabric);
+  cu1.position.set(-0.42, 0.55, -0.02);
+  const cu2 = new THREE.Mesh(cushG, fabric);
+  cu2.position.set(0.42, 0.55, -0.02);
+  const legG = new THREE.CylinderGeometry(0.04, 0.03, 0.14, 8);
+  for (const [lx, lz] of [[-0.82, -0.32], [0.82, -0.32], [-0.82, 0.32], [0.82, 0.32]]) {
+    const leg = new THREE.Mesh(legG, legM);
+    leg.position.set(lx, 0.07, lz);
+    g.add(leg);
+  }
+  g.add(base, back, arm1, arm2, cu1, cu2);
+  g.userData.seat = true;
+  return g;
+}
+
 const CATALOG = [
   { id: 'box', name: 'ЯЩИК', icon: '📦', build: buildBox },
   { id: 'barrel', name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
@@ -1476,6 +1590,7 @@ const CATALOG = [
   { id: 'tv-retro', name: 'ТВ РЕТРО', icon: '📺', build: buildTvRetro, tv: true },
   { id: 'console', name: 'ПРИСТАВКА', icon: '🎮', build: buildConsole, console: true },
   { id: 'connector', name: 'КОННЕКТОР', icon: '🔌', build: buildConnector },
+  { id: 'sofa', name: 'ДИВАН', icon: '🛋️', build: buildSofa, seat: true },
 ];
 
 const BOMBS = {
@@ -1499,7 +1614,7 @@ function spawnSelected() {
   mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
   mesh.rotation.y = player.yaw + Math.PI;
   spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, url: null });
+  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: null });
   playPop();
 }
 
@@ -1828,7 +1943,7 @@ function loadFromXML(text) {
     mesh.rotation.y = parseFloat(el.getAttribute('ry')) || 0;
     spawnedGroup.add(mesh);
     const rawUrl = el.getAttribute('url');
-    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, url: rawUrl && parseVideo(rawUrl) ? rawUrl : null });
+    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: rawUrl && parseVideo(rawUrl) ? rawUrl : null });
   }
 
   document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
@@ -2525,6 +2640,16 @@ document.getElementById('xml-file').addEventListener('change', (e) => {
 const btnTvWatch = document.getElementById('btn-tv-watch');
 const btnTvLink = document.getElementById('btn-tv-link');
 
+const tvOffBtn = document.createElement('button');
+tvOffBtn.textContent = '✕ ВЫКЛЮЧИТЬ ТВ (C)';
+tvOffBtn.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:30;display:none;background:#1a1208;color:#ffcf5a;border:2px solid #d89628;padding:8px 18px;font:bold 13px \'Courier New\',monospace;letter-spacing:0.1em;cursor:pointer;border-radius:6px;';
+tvOffBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  stopTvScreen();
+  if (!IS_TOUCH && S.started) canvas.requestPointerLock();
+});
+document.body.appendChild(tvOffBtn);
+
 const cssWrap = document.createElement('div');
 cssWrap.style.cssText = 'position:fixed;left:0;top:0;overflow:hidden;pointer-events:none;z-index:5;display:none;';
 const cssInner = document.createElement('div');
@@ -2716,6 +2841,29 @@ function watchTv(o) {
   showMsg('📺 Включено! C — выключить');
 }
 
+function sitOn(o) {
+  S.sitting = o;
+  showMsg(IS_TOUCH ? '🛋️ Устроился · 📺 — спать · ➕ — встать' : '🛋️ Устроился · C — спать · Space — встать');
+}
+
+function standUp() {
+  S.sitting = null;
+  player.pos.y = EYE_HEIGHT;
+  player.onGround = true;
+  showMsg('🛋️ Ты встал');
+}
+
+function sleepNow() {
+  flashScreen();
+  if (S.night) {
+    S.night = false;
+    applyAtmosphere();
+    showMsg('😴 Ты выспался — наступило утро');
+  } else {
+    showMsg('😴 Ты вздремнул');
+  }
+}
+
 function setTvLink(o) {
   const u = window.prompt('Ссылка на видео (YouTube или mp4):', o.url || '');
   if (u === null) return;
@@ -2729,8 +2877,10 @@ function updateTvCss() {
   const o = S.tvObj;
   if (!o || !o.mesh.parent || !S.playing || S.driving) {
     cssWrap.style.display = 'none';
+    tvOffBtn.style.display = 'none';
     return;
   }
+  tvOffBtn.style.display = 'block';
   const scr = o.mesh.userData.screen;
   if (!scr) { cssWrap.style.display = 'none'; return; }
   _tvV1.setFromMatrixPosition(scr.matrixWorld);
@@ -2756,7 +2906,9 @@ function updateTvCss() {
 btnTvWatch.addEventListener('touchstart', (e) => {
   e.preventDefault();
   e.stopPropagation();
+  if (S.sitting) { sleepNow(); return; }
   const o = findAimed();
+  if (o && o.seat) { sitOn(o); return; }
   if (o && o.tv) watchTv(o);
   else if (o && o.console) {
     const tv = nearestTvTo(o);
@@ -2894,8 +3046,15 @@ function loop(now) {
         const aim = near ? null : findAimed();
         const tvAim = aim && aim.tv ? aim : null;
         const conAim = aim && aim.console ? aim : null;
-        if (near) {
+        const seatAim = aim && aim.seat ? aim : null;
+        if (S.sitting) {
+          promptEl.textContent = IS_TOUCH ? '📺 — спать · ➕ — встать' : 'C — спать · Space — встать';
+          promptEl.style.opacity = 1;
+        } else if (near) {
           promptEl.textContent = IS_TOUCH ? '🚗 — сесть в машину' : 'E — сесть в машину';
+          promptEl.style.opacity = 1;
+        } else if (seatAim) {
+          promptEl.textContent = IS_TOUCH ? '📺 — сесть на диван' : 'C — сесть на диван';
           promptEl.style.opacity = 1;
         } else if (tvAim) {
           promptEl.textContent = tvAim.url
@@ -2912,7 +3071,7 @@ function loop(now) {
           promptEl.style.opacity = 0;
         }
         btnCar.classList.toggle('nearest', !!near || !!S.driving);
-        btnTvWatch.classList.toggle('nearest', !!tvAim || !!(conAim && nearestTvTo(conAim)));
+        btnTvWatch.classList.toggle('nearest', !!tvAim || !!(conAim && nearestTvTo(conAim)) || !!seatAim || !!S.sitting);
         btnTvLink.classList.toggle('nearest', !!tvAim);
       }
       updatePhysics(dt);
