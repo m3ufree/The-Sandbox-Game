@@ -784,8 +784,8 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyT') toggleDayNight();
   if (e.code === 'KeyX') deleteAimed();
   if (e.code === 'KeyE') { if (S.driving) exitCar(); else { const c = nearestCar(); if (c) enterCar(c); } }
-  const digit = e.code.match(/^Digit([1-8])$/);
-  if (digit) selectSlot(parseInt(digit[1], 10) - 1);
+  const digit = e.code.match(/^Digit([1-9])$/);
+  if (digit) selectSlot(Math.min(parseInt(digit[1], 10) - 1, CATALOG.length - 1));
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) e.preventDefault();
 });
 window.addEventListener('keyup', (e) => { keys[e.code] = false; });
@@ -1131,6 +1131,76 @@ function buildTnt() {
   return g;
 }
 
+function buildBombMed() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x7a1a1a, emissive: 0xaa2010, emissiveIntensity: 0.25, roughness: 0.5 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 1.25, 14), mat);
+  body.position.y = 0.62;
+  const bandMat = new THREE.MeshStandardMaterial({ color: 0xd8cfc0, roughness: 0.8 });
+  for (const y of [0.25, 0.62, 1.0]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.43, 0.43, 0.1, 14), bandMat);
+    band.position.y = y;
+    g.add(band);
+  }
+  const fuse = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.35, 5),
+    new THREE.MeshStandardMaterial({ color: 0xd8c090 })
+  );
+  fuse.position.y = 1.4;
+  g.add(body, fuse);
+  return g;
+}
+
+function buildBombBig() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.35, metalness: 0.6 });
+  const sphere = new THREE.Mesh(new THREE.SphereGeometry(0.62, 14, 10), mat);
+  sphere.position.y = 0.72;
+  const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.2, 0.22, 10), mat);
+  cap.position.y = 1.35;
+  const fuse = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.03, 0.03, 0.4, 5),
+    new THREE.MeshStandardMaterial({ color: 0xd8c090 })
+  );
+  fuse.position.y = 1.62;
+  fuse.rotation.z = 0.25;
+  const ring = new THREE.Mesh(
+    new THREE.TorusGeometry(0.62, 0.035, 6, 18),
+    new THREE.MeshStandardMaterial({ color: 0x8a2020, roughness: 0.5 })
+  );
+  ring.rotation.x = Math.PI / 2;
+  ring.position.y = 0.72;
+  g.add(sphere, cap, fuse, ring);
+  return g;
+}
+
+function buildBombNuke() {
+  const g = new THREE.Group();
+  const mat = new THREE.MeshStandardMaterial({ color: 0x4a5a38, roughness: 0.6, metalness: 0.3 });
+  const body = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 1.15, 14), mat);
+  body.position.y = 0.58;
+  const warnMat = new THREE.MeshStandardMaterial({ color: 0x1a1a1a, emissive: 0x5aff30, emissiveIntensity: 0.7, roughness: 0.5 });
+  for (const y of [0.35, 0.82]) {
+    const band = new THREE.Mesh(new THREE.CylinderGeometry(0.51, 0.51, 0.09, 14), warnMat);
+    band.position.y = y;
+    g.add(band);
+  }
+  const nose = new THREE.Mesh(new THREE.ConeGeometry(0.5, 0.4, 14), mat);
+  nose.position.y = 1.35;
+  const finGeo = new THREE.BoxGeometry(0.06, 0.3, 0.35);
+  for (let k = 0; k < 4; k++) {
+    const fin = new THREE.Mesh(finGeo, mat);
+    const a = k * Math.PI / 2;
+    fin.position.set(Math.sin(a) * 0.48, 0.2, Math.cos(a) * 0.48);
+    fin.rotation.y = a;
+    g.add(fin);
+  }
+  const light = new THREE.PointLight(0x5aff30, 3, 5, 2);
+  light.position.y = 1.2;
+  g.add(body, nose, light);
+  return g;
+}
+
 const CATALOG = [
   { id: 'box', name: 'ЯЩИК', icon: '📦', build: buildBox },
   { id: 'barrel', name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
@@ -1139,8 +1209,18 @@ const CATALOG = [
   { id: 'lamp', name: 'ФОНАРЬ', icon: '🏮', build: buildLamp },
   { id: 'hay', name: 'СТОГ', icon: '🌾', build: buildHay },
   { id: 'well', name: 'КОЛОДЕЦ', icon: '⛲', build: buildWell },
-  { id: 'tnt', name: 'ТНТ', icon: '💥', build: buildTnt, tnt: true },
+  { id: 'tnt', name: 'МАЛАЯ', icon: '💥', build: buildTnt, tnt: true },
+  { id: 'bomb-med', name: 'СРЕДНЯЯ', icon: '🧨', build: buildBombMed, tnt: true },
+  { id: 'bomb-big', name: 'БОМБА', icon: '💣', build: buildBombBig, tnt: true },
+  { id: 'nuke', name: 'ЯДЕРКА', icon: '☢️', build: buildBombNuke, tnt: true },
 ];
+
+const BOMBS = {
+  tnt: { radius: 8, impulse: 13, shake: 0.6, flash: 80, flashDist: 28, crime: 1 },
+  'bomb-med': { radius: 14, impulse: 19, shake: 0.8, flash: 150, flashDist: 40, crime: 1 },
+  'bomb-big': { radius: 22, impulse: 26, shake: 1.0, flash: 260, flashDist: 60, crime: 2 },
+  nuke: { radius: 45, impulse: 34, shake: 1.3, flash: 520, flashDist: 130, crime: 3, nuke: true },
+};
 
 function buildHotbar() {
   hotbarEl.innerHTML = '';
@@ -1169,7 +1249,7 @@ function spawnSelected() {
   mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
   mesh.rotation.y = player.yaw + Math.PI;
   spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id });
+  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null });
   playPop();
 }
 
@@ -1226,29 +1306,31 @@ function deleteNearest() {
 
 function explode(obj) {
   const p = obj.mesh.position.clone();
+  const spec = obj.spec || BOMBS.tnt;
   removeObject(obj);
   playBoom();
-  S.shakeT = 0.6;
-  commitCrime();
+  if (spec.nuke) { playThunder(); flashScreen(); }
+  S.shakeT = spec.shake;
+  for (let k = 0; k < spec.crime; k++) commitCrime();
   panicPos.copy(p);
   panicT = 3;
   for (const n of [...npcs]) {
     if (n.type === 'god' || n.downT > 0) continue;
-    if (Math.hypot(n.mesh.position.x - p.x, n.mesh.position.z - p.z) < 5) knockNPC(n, 4);
+    if (Math.hypot(n.mesh.position.x - p.x, n.mesh.position.z - p.z) < spec.radius * 0.8) knockNPC(n, 4);
   }
-  const flash = new THREE.PointLight(0xffa040, 80, 28, 1.5);
+  const flash = new THREE.PointLight(0xffa040, spec.flash, spec.flashDist, 1.5);
   flash.position.copy(p).setY(1.5);
   worldGroup.add(flash);
-  setTimeout(() => { if (worldGroup) worldGroup.remove(flash); }, 160);
+  setTimeout(() => { if (worldGroup) worldGroup.remove(flash); }, spec.nuke ? 400 : 160);
   for (const o of [...objects]) {
     const d = o.mesh.position.distanceTo(p);
-    if (d < 8) {
+    if (d < spec.radius) {
       const dir = o.mesh.position.clone().sub(p).setY(0);
       if (dir.lengthSq() < 0.01) dir.set(rand(-1, 1), 0, rand(-1, 1));
       dir.normalize();
-      const power = 1 - d / 8;
-      o.vel.addScaledVector(dir, 13 * power);
-      o.vel.y += 7 * power;
+      const power = 1 - d / spec.radius;
+      o.vel.addScaledVector(dir, spec.impulse * power);
+      o.vel.y += spec.impulse * 0.55 * power;
       if (o.type === 'car') {
         o.av = rand(-3, 3);
         ensureSoft(o);
@@ -1492,7 +1574,7 @@ function loadFromXML(text) {
     mesh.position.set(x, y, z);
     mesh.rotation.y = parseFloat(el.getAttribute('ry')) || 0;
     spawnedGroup.add(mesh);
-    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id });
+    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null });
   }
 
   document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
