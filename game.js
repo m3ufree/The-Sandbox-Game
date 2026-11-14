@@ -1,13 +1,12 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
 // ============================================================
-//  THE MONSTER — 3D horror
+//  THE MONSTER — 3D horror (maps: yard / forest / city)
 // ============================================================
 
 const TILE = 4;
 const COLS = 14, ROWS = 14;
 const GW = COLS * 2 + 1, GH = ROWS * 2 + 1;
-const WALL_H = 4.2;
 const FUSE_COUNT = 6;
 
 const PLAYER_WALK = 4.2;
@@ -38,17 +37,19 @@ const deathStats = document.getElementById('death-stats');
 const winOverlay = document.getElementById('win-overlay');
 const winStats = document.getElementById('win-stats');
 const rotateOverlay = document.getElementById('rotate-overlay');
+const jumpscareEl = document.getElementById('jumpscare');
 const joyBase = document.getElementById('joy-base');
 const joyKnob = document.getElementById('joy-knob');
 
 // ---------- Game state ----------
 const S = {
+  map: 'yard',
   started: false, playing: false, dead: false, won: false,
   time: 0, startTime: 0,
   battery: 100, flashlight: true,
   stamina: 100, staminaDelay: 0,
   fuses: 0, exitOpen: false,
-  deathTimer: -1, shake: 0,
+  deathTimer: -1, shake: 0, pausedByRotate: false,
 };
 
 // ---------- Renderer / scene ----------
@@ -58,23 +59,53 @@ if (IS_TOUCH) document.body.classList.add('touch');
 renderer.setSize(window.innerWidth, window.innerHeight);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x000000);
-scene.fog = new THREE.FogExp2(0x000000, 0.085);
 
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 120);
 camera.rotation.order = 'YXZ';
 
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
-setTimeout(checkOrientation, 0);
+const ambient = new THREE.AmbientLight(0x33404d, 0.2);
+scene.add(ambient);
 
-// ---------- Maze ----------
-const grid = new Uint8Array(GW * GH).fill(1);
+const playerLight = new THREE.PointLight(0x556677, 2.2, 9, 1.6);
+scene.add(playerLight);
+
+const flashlight = new THREE.SpotLight(0xfff2d0, 90, 40, 0.46, 0.45, 1.5);
+scene.add(flashlight);
+scene.add(flashlight.target);
+
+// ---------- Maps ----------
+const MAPS = {
+  yard: {
+    name: 'Двор',
+    wallColor: 0x4a4642, wallH: 3.0, ground: 0x2b2a28,
+    fog: 0x060608, fogD: 0.065, ambient: [0x33404d, 0.22],
+  },
+  forest: {
+    name: 'Лес',
+    wallColor: 0x3a2a1a, wallH: 5.5, ground: 0x1a2214,
+    fog: 0x040704, fogD: 0.095, ambient: [0x223322, 0.18],
+  },
+  city: {
+    name: 'Заражённый город',
+    wallColor: 0x37342f, wallH: 5.0, ground: 0x232325,
+    fog: 0x060d05, fogD: 0.075, ambient: [0x2a3325, 0.2],
+  },
+};
+
+const spawnTile = [1, 1];
+const exitTile = [GW - 2, GH - 2];
+
+const grid = new Uint8Array(GW * GH);
 const idx = (i, j) => j * GW + i;
 const isWall = (i, j) => (i < 0 || j < 0 || i >= GW || j >= GH) ? true : grid[idx(i, j)] === 1;
+let floors = [];
+let flickerLights = [];
+let worldGroup = null;
+let doorGroup = null;
+let items = [];
+let builtMap = null;
+
+const tileCenter = (i, j) => new THREE.Vector3((i + 0.5) * TILE, 0, (j + 0.5) * TILE);
 
 function generateMaze() {
   const visited = new Uint8Array(COLS * ROWS);
@@ -97,16 +128,73 @@ function generateMaze() {
     }
     if (!moved) stack.pop();
   }
-  for (let k = 0; k < 26; k++) {
-    const i = 1 + randInt(GW - 2), j = 1 + randInt(GH - 2);
-    if (grid[idx(i, j)] === 1 && ((i % 2 === 0) !== (j % 2 === 0))) grid[idx(i, j)] = 0;
+}
+
+function carveToStreet(i, j) {
+  const dir = (i % 6) > 3 ? -1 : 1;
+  let ci = i;
+  grid[idx(ci, j)] = 0;
+  while (ci % 6 !== 3 && ci > 0 && ci < GW - 1) {
+    ci += dir;
+    grid[idx(ci, j)] = 0;
   }
 }
-generateMaze();
 
-const floors = [];
-for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (!isWall(i, j)) floors.push([i, j]);
-const tileCenter = (i, j) => new THREE.Vector3((i + 0.5) * TILE, 0, (j + 0.5) * TILE);
+function bfsReach() {
+  const reach = new Uint8Array(GW * GH);
+  const q = [idx(spawnTile[0], spawnTile[1])];
+  reach[q[0]] = 1;
+  let head = 0;
+  while (head < q.length) {
+    const cur = q[head++];
+    const ci = cur % GW, cj = (cur - ci) / GW;
+    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+      const ni = ci + di, nj = cj + dj;
+      if (isWall(ni, nj)) continue;
+      const n = idx(ni, nj);
+      if (reach[n]) continue;
+      reach[n] = 1;
+      q.push(n);
+    }
+  }
+  return reach;
+}
+
+function generateGrid(map) {
+  grid.fill(1);
+  if (map === 'yard') {
+    generateMaze();
+    for (let j = 1; j < GH - 1; j++) for (let i = 1; i < GW - 1; i++) {
+      if (grid[idx(i, j)] === 1 && ((i % 2 === 0) !== (j % 2 === 0)) && Math.random() < 0.42) grid[idx(i, j)] = 0;
+    }
+  } else if (map === 'forest') {
+    grid.fill(0);
+    for (let j = 1; j < GH - 1; j++) for (let i = 1; i < GW - 1; i++) {
+      const nearSpawn = Math.abs(i - spawnTile[0]) < 3 && Math.abs(j - spawnTile[1]) < 3;
+      const nearExit = Math.abs(i - exitTile[0]) < 3 && Math.abs(j - exitTile[1]) < 3;
+      if (!nearSpawn && !nearExit && Math.random() < 0.34) grid[idx(i, j)] = 1;
+    }
+  } else {
+    for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+      if (i === 0 || j === 0 || i === GW - 1 || j === GH - 1) { grid[idx(i, j)] = 1; continue; }
+      grid[idx(i, j)] = (i % 6 === 3 || j % 6 === 3) ? 0 : (Math.random() < 0.82 ? 1 : 0);
+    }
+    carveToStreet(spawnTile[0], spawnTile[1]);
+    carveToStreet(exitTile[0], exitTile[1]);
+  }
+
+  let reach = bfsReach();
+  if (!reach[idx(exitTile[0], exitTile[1])]) {
+    let i = exitTile[0], j = exitTile[1];
+    while (i !== spawnTile[0]) { grid[idx(i, j)] = 0; i += i < spawnTile[0] ? 1 : -1; }
+    while (j !== spawnTile[1]) { grid[idx(i, j)] = 0; j += j < spawnTile[1] ? 1 : -1; }
+    reach = bfsReach();
+  }
+  floors = [];
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
+    if (!isWall(i, j) && reach[idx(i, j)]) floors.push([i, j]);
+  }
+}
 
 function losTiles(i0, j0, i1, j1) {
   let x = i0, y = j0;
@@ -151,51 +239,131 @@ function bfsPath(si, sj, ti, tj) {
   return path.map(p => tileCenter(p % GW, Math.floor(p / GW)));
 }
 
-// ---------- Scene build ----------
-const wallGeo = new THREE.BoxGeometry(TILE, WALL_H, TILE);
-const wallMat = new THREE.MeshStandardMaterial({ color: 0x35322e, roughness: 0.95, metalness: 0.02 });
-const wallCount = grid.reduce((a, v) => a + v, 0);
-const walls = new THREE.InstancedMesh(wallGeo, wallMat, wallCount);
-{
+// ---------- World building ----------
+function disposeWorld() {
+  if (!worldGroup) return;
+  worldGroup.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) {
+      if (Array.isArray(o.material)) o.material.forEach(m => m.dispose());
+      else o.material.dispose();
+    }
+  });
+  scene.remove(worldGroup);
+  worldGroup = null;
+}
+
+function buildWalls(cfg, map) {
+  const wallTiles = [];
+  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) if (grid[idx(i, j)] === 1) wallTiles.push([i, j]);
+
+  if (map === 'forest') {
+    const trunkGeo = new THREE.CylinderGeometry(0.32, 0.45, cfg.wallH, 7);
+    const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 1 });
+    const leafGeo = new THREE.ConeGeometry(1.7, 3.4, 8);
+    const leafMat = new THREE.MeshStandardMaterial({ color: 0x14261a, roughness: 1 });
+    for (const [i, j] of wallTiles) {
+      const c = tileCenter(i, j);
+      const ox = rand(-1.0, 1.0), oz = rand(-1.0, 1.0);
+      const trunk = new THREE.Mesh(trunkGeo, trunkMat);
+      trunk.position.set(c.x + ox, cfg.wallH / 2, c.z + oz);
+      const s = rand(0.8, 1.35);
+      trunk.scale.set(s, s, s);
+      worldGroup.add(trunk);
+      const leaf = new THREE.Mesh(leafGeo, leafMat);
+      leaf.position.set(c.x + ox, cfg.wallH + 1.1 * s, c.z + oz);
+      leaf.scale.set(s, s, s);
+      worldGroup.add(leaf);
+    }
+    return;
+  }
+
+  const wallGeo = new THREE.BoxGeometry(TILE, cfg.wallH, TILE);
+  const wallMat = new THREE.MeshStandardMaterial({ color: cfg.wallColor, roughness: 0.95, metalness: 0.02 });
+  const walls = new THREE.InstancedMesh(wallGeo, wallMat, wallTiles.length);
   const m = new THREE.Matrix4();
-  let n = 0;
-  for (let j = 0; j < GH; j++) for (let i = 0; i < GW; i++) {
-    if (grid[idx(i, j)] !== 1) continue;
-    m.setPosition((i + 0.5) * TILE, WALL_H / 2, (j + 0.5) * TILE);
-    walls.setMatrixAt(n++, m);
+  wallTiles.forEach(([i, j], n) => {
+    m.setPosition((i + 0.5) * TILE, cfg.wallH / 2, (j + 0.5) * TILE);
+    walls.setMatrixAt(n, m);
+  });
+  worldGroup.add(walls);
+}
+
+function addYardProps() {
+  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 8);
+  spots.sort(() => Math.random() - 0.5);
+  const poleGeo = new THREE.CylinderGeometry(0.06, 0.08, 3, 6);
+  const poleMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2c, roughness: 0.8 });
+  const headGeo = new THREE.BoxGeometry(0.5, 0.16, 0.28);
+  for (let k = 0; k < 6 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const pole = new THREE.Mesh(poleGeo, poleMat);
+    pole.position.set(c.x, 1.5, c.z);
+    const head = new THREE.Mesh(headGeo, poleMat);
+    head.position.set(c.x, 3.02, c.z);
+    const light = new THREE.PointLight(0xffb060, 9, 13, 1.8);
+    light.position.set(c.x, 2.85, c.z);
+    worldGroup.add(pole, head, light);
+    flickerLights.push({ light, base: 9 });
+  }
+  const boxGeo = new THREE.BoxGeometry(1.1, 1.0, 0.8);
+  const boxMat = new THREE.MeshStandardMaterial({ color: 0x24301f, roughness: 0.9 });
+  for (let k = 6; k < 12 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const box = new THREE.Mesh(boxGeo, boxMat);
+    box.position.set(c.x + rand(-1, 1), 0.5, c.z + rand(-1, 1));
+    box.rotation.y = rand(0, Math.PI);
+    worldGroup.add(box);
   }
 }
-scene.add(walls);
 
-const floor = new THREE.Mesh(
-  new THREE.PlaneGeometry(GW * TILE, GH * TILE),
-  new THREE.MeshStandardMaterial({ color: 0x1b1a18, roughness: 1 })
-);
-floor.rotation.x = -Math.PI / 2;
-floor.position.set(GW * TILE / 2, 0, GH * TILE / 2);
-scene.add(floor);
+function addCityProps() {
+  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 8);
+  spots.sort(() => Math.random() - 0.5);
+  const barrelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.95, 10);
+  const barrelMat = new THREE.MeshStandardMaterial({ color: 0x1e3320, emissive: 0x2fbf2f, emissiveIntensity: 0.55, roughness: 0.6 });
+  for (let k = 0; k < 8 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const b = new THREE.Mesh(barrelGeo, barrelMat);
+    b.position.set(c.x + rand(-1.1, 1.1), 0.48, c.z + rand(-1.1, 1.1));
+    const light = new THREE.PointLight(0x44ff44, 2.6, 6, 1.8);
+    light.position.copy(b.position).setY(1.2);
+    worldGroup.add(b, light);
+    flickerLights.push({ light, base: 2.6 });
+  }
+  const bodyGeo = new THREE.BoxGeometry(1.9, 0.75, 4.2);
+  const topGeo = new THREE.BoxGeometry(1.7, 0.55, 2.2);
+  const carColors = [0x3a1a1a, 0x1a2436, 0x2c2c2c, 0x33301a];
+  for (let k = 8; k < 14 && k < spots.length; k++) {
+    const c = tileCenter(spots[k][0], spots[k][1]);
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(bodyGeo, new THREE.MeshStandardMaterial({ color: carColors[k % carColors.length], roughness: 0.5, metalness: 0.35 }));
+    body.position.y = 0.45;
+    const top = new THREE.Mesh(topGeo, new THREE.MeshStandardMaterial({ color: 0x101418, roughness: 0.3, metalness: 0.5 }));
+    top.position.set(0, 1.0, -0.2);
+    g.add(body, top);
+    g.position.set(c.x, 0, c.z);
+    g.rotation.y = Math.random() < 0.5 ? 0 : Math.PI / 2;
+    worldGroup.add(g);
+  }
+}
 
-const ceil = new THREE.Mesh(
-  new THREE.PlaneGeometry(GW * TILE, GH * TILE),
-  new THREE.MeshStandardMaterial({ color: 0x0d0d0c, roughness: 1 })
-);
-ceil.rotation.x = Math.PI / 2;
-ceil.position.set(GW * TILE / 2, WALL_H, GH * TILE / 2);
-scene.add(ceil);
-
-scene.add(new THREE.AmbientLight(0x223344, 0.12));
-
-const playerLight = new THREE.PointLight(0x556677, 2.2, 9, 1.6);
-scene.add(playerLight);
-
-const flashlight = new THREE.SpotLight(0xfff2d0, 90, 40, 0.46, 0.45, 1.5);
-flashlight.visible = true;
-scene.add(flashlight);
-scene.add(flashlight.target);
-
-// ---------- Items ----------
-const itemGroup = new THREE.Group();
-scene.add(itemGroup);
+function buildDoor() {
+  doorGroup = new THREE.Group();
+  const door = new THREE.Mesh(
+    new THREE.BoxGeometry(TILE * 0.7, MAPS[S.map].wallH * 0.8, 0.25),
+    new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.85 })
+  );
+  door.position.y = MAPS[S.map].wallH * 0.4;
+  doorGroup.add(door);
+  const sign = new THREE.PointLight(0xff2020, 4, 10, 1.8);
+  sign.position.set(0, MAPS[S.map].wallH - 0.5, 0.5);
+  doorGroup.add(sign);
+  doorGroup.userData.sign = sign;
+  const c = tileCenter(exitTile[0], exitTile[1]);
+  doorGroup.position.set(c.x, 0, c.z);
+  worldGroup.add(doorGroup);
+}
 
 function makeFuse() {
   const g = new THREE.Group();
@@ -205,8 +373,7 @@ function makeFuse() {
   );
   body.rotation.z = Math.PI / 2;
   g.add(body);
-  const light = new THREE.PointLight(0xffc840, 3.5, 6, 1.8);
-  g.add(light);
+  g.add(new THREE.PointLight(0xffc840, 3.5, 6, 1.8));
   return g;
 }
 
@@ -220,33 +387,24 @@ function makeBattery() {
   return g;
 }
 
-const spawnTile = [1, 1];
-const exitTile = [GW - 2, GH - 2];
-
-function deadEnds() {
-  return floors.filter(([i, j]) => {
+function placeItems() {
+  items = [];
+  const spots = floors.filter(([i, j]) => {
     if ((i === spawnTile[0] && j === spawnTile[1]) || (i === exitTile[0] && j === exitTile[1])) return false;
-    let w = 0;
-    for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) if (isWall(i + di, j + dj)) w++;
-    return w >= 3;
-  });
-}
-
-const items = [];
-{
-  const candidates = deadEnds().sort(() => Math.random() - 0.5);
+    return Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 6;
+  }).sort(() => Math.random() - 0.5);
   const chosen = [];
-  for (const c of candidates) {
+  for (const c of spots) {
     if (chosen.length >= FUSE_COUNT + 4) break;
-    if (chosen.every(o => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) > 8)) chosen.push(c);
+    if (chosen.every(o => Math.abs(o[0] - c[0]) + Math.abs(o[1] - c[1]) > 7)) chosen.push(c);
   }
-  while (chosen.length < FUSE_COUNT + 4) chosen.push(candidates[randInt(candidates.length)]);
+  while (chosen.length < FUSE_COUNT + 4 && spots.length) chosen.push(spots[randInt(spots.length)]);
 
   for (let k = 0; k < FUSE_COUNT; k++) {
     const mesh = makeFuse();
     const [i, j] = chosen[k];
     mesh.position.copy(tileCenter(i, j)).setY(0.9);
-    itemGroup.add(mesh);
+    worldGroup.add(mesh);
     items.push({ type: 'fuse', mesh, taken: false });
   }
   for (let k = 0; k < 4; k++) {
@@ -254,27 +412,44 @@ const items = [];
     const [i, j] = chosen[FUSE_COUNT + k];
     mesh.position.copy(tileCenter(i, j)).setY(0.75);
     mesh.rotation.z = Math.PI / 2;
-    itemGroup.add(mesh);
+    worldGroup.add(mesh);
     items.push({ type: 'battery', mesh, taken: false });
   }
 }
 
-// ---------- Exit door ----------
-const doorGroup = new THREE.Group();
-{
-  const door = new THREE.Mesh(
-    new THREE.BoxGeometry(TILE * 0.7, WALL_H * 0.75, 0.25),
-    new THREE.MeshStandardMaterial({ color: 0x3a2a1a, roughness: 0.85 })
+function buildWorld(map) {
+  disposeWorld();
+  generateGrid(map);
+  const cfg = MAPS[map];
+  worldGroup = new THREE.Group();
+
+  const ground = new THREE.Mesh(
+    new THREE.PlaneGeometry(GW * TILE, GH * TILE),
+    new THREE.MeshStandardMaterial({ color: cfg.ground, roughness: 1 })
   );
-  door.position.y = WALL_H * 0.375;
-  doorGroup.add(door);
-  const sign = new THREE.PointLight(0xff2020, 4, 10, 1.8);
-  sign.position.set(0, WALL_H - 0.6, 0.5);
-  doorGroup.add(sign);
-  doorGroup.userData.sign = sign;
-  const c = tileCenter(exitTile[0], exitTile[1]);
-  doorGroup.position.set(c.x, 0, c.z);
-  scene.add(doorGroup);
+  ground.rotation.x = -Math.PI / 2;
+  ground.position.set(GW * TILE / 2, 0, GH * TILE / 2);
+  worldGroup.add(ground);
+
+  buildWalls(cfg, map);
+  flickerLights = [];
+  if (map === 'yard') addYardProps();
+  if (map === 'city') addCityProps();
+  buildDoor();
+  placeItems();
+  scene.add(worldGroup);
+
+  scene.fog = new THREE.FogExp2(cfg.fog, cfg.fogD);
+  scene.background = new THREE.Color(cfg.fog);
+  ambient.color.setHex(cfg.ambient[0]);
+  ambient.intensity = cfg.ambient[1];
+
+  monsterSpawn();
+  player.pos.copy(tileCenter(spawnTile[0], spawnTile[1]));
+  player.pos.y = EYE_HEIGHT;
+  player.yaw = Math.PI * 0.75;
+  player.pitch = 0;
+  builtMap = map;
 }
 
 // ---------- Monster ----------
@@ -288,6 +463,10 @@ const monster = new THREE.Group();
   head.position.y = 2.35;
   head.scale.y = 1.3;
   monster.add(head);
+  const face = new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 10), new THREE.MeshStandardMaterial({ color: 0xb8b0a4, roughness: 0.9 }));
+  face.position.set(0, 2.38, 0.14);
+  face.scale.set(1, 1.25, 0.7);
+  monster.add(face);
   const armGeo = new THREE.CylinderGeometry(0.09, 0.07, 1.5, 6);
   const armL = new THREE.Mesh(armGeo, skin);
   armL.position.set(-0.5, 1.4, 0);
@@ -305,9 +484,9 @@ const monster = new THREE.Group();
   const eyeMat = new THREE.MeshBasicMaterial({ color: 0xff1a1a });
   const eyeGeo = new THREE.SphereGeometry(0.055, 8, 8);
   const eyeL = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeL.position.set(-0.11, 2.42, 0.26);
+  eyeL.position.set(-0.11, 2.42, 0.3);
   const eyeR = new THREE.Mesh(eyeGeo, eyeMat);
-  eyeR.position.set(0.11, 2.42, 0.26);
+  eyeR.position.set(0.11, 2.42, 0.3);
   monster.add(eyeL, eyeR);
   const eyeGlow = new THREE.PointLight(0xff2020, 1.6, 7, 1.8);
   eyeGlow.position.set(0, 2.4, 0.3);
@@ -317,18 +496,23 @@ scene.add(monster);
 
 const M = {
   pos: new THREE.Vector3(), state: 'roam', path: null, pathIndex: 0,
-  repathTimer: 0, chaseTimer: 0, farTimer: 0, target: null, walkPhase: 0,
+  repathTimer: 0, chaseTimer: 0, farTimer: 0, lastKnown: null, walkPhase: 0,
 };
+
 function monsterSpawn() {
-  const far = floors.filter(([i, j]) => {
-    const c = tileCenter(i, j);
-    return c.distanceTo(tileCenter(spawnTile[0], spawnTile[1])) > 34;
-  });
-  const pick = far.length ? far[randInt(far.length)] : floors[floors.length - 1];
+  let far = floors.filter(([i, j]) => tileCenter(i, j).distanceTo(tileCenter(spawnTile[0], spawnTile[1])) > 34);
+  if (!far.length) {
+    far = [...floors].sort((a, b) =>
+      tileCenter(b[0], b[1]).distanceTo(tileCenter(spawnTile[0], spawnTile[1])) -
+      tileCenter(a[0], a[1]).distanceTo(tileCenter(spawnTile[0], spawnTile[1])));
+  }
+  const pick = far[randInt(Math.min(far.length, 10))] || far[0] || spawnTile;
   M.pos.copy(tileCenter(pick[0], pick[1]));
+  M.state = 'roam';
+  M.path = null;
+  M.lastKnown = null;
   monster.position.copy(M.pos);
 }
-monsterSpawn();
 
 function monsterSpeed() {
   if (M.state === 'chase') return 4.4 + S.fuses * 0.3;
@@ -410,23 +594,17 @@ function updateMonster(dt) {
 
   if (dist < 1.15 && S.deathTimer < 0) {
     S.deathTimer = 0;
+    jumpscareEl.classList.add('on');
     playScream();
   }
 }
 
 // ---------- Player ----------
 const player = {
-  pos: tileCenter(spawnTile[0], spawnTile[1]),
+  pos: new THREE.Vector3((spawnTile[0] + 0.5) * TILE, EYE_HEIGHT, (spawnTile[1] + 0.5) * TILE),
   yaw: Math.PI * 0.75, pitch: 0,
   bobT: 0, stepT: 0, moving: false,
 };
-player.pos.y = EYE_HEIGHT;
-
-camera.position.set(player.pos.x, EYE_HEIGHT, player.pos.z);
-camera.rotation.set(0, player.yaw, 0);
-flashlight.position.copy(camera.position);
-flashlight.target.position.set(player.pos.x, EYE_HEIGHT, player.pos.z - 10);
-playerLight.position.copy(camera.position);
 
 // ---------- Touch controls ----------
 const touchInput = { moveId: null, lookId: null, moveX: 0, moveZ: 0, sprint: false, lookLast: { x: 0, y: 0 } };
@@ -519,9 +697,8 @@ function checkOrientation() {
     }
   }
 }
-window.addEventListener('resize', checkOrientation);
-window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 120));
 
+// ---------- Keyboard / mouse ----------
 const keys = {};
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
@@ -674,18 +851,22 @@ function updateFX(dt) {
   vignette.style.opacity = prox.toFixed(2);
   S.shake = prox * prox * (M.state === 'chase' ? 1.4 : 0.5);
 
+  for (const L of flickerLights) {
+    L.light.intensity = Math.random() < 0.05 ? L.base * rand(0.1, 0.6) : L.base;
+  }
+
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
 
   batteryFill.style.width = S.battery + '%';
-  batteryFill.style.background = S.battery < 25 ? '#b30000' : '#d8b23a';
+  batteryFill.style.background = S.battery < 25 ? '#c62828' : '#e0b53a';
   staminaFill.style.width = S.stamina + '%';
 
   const beatRate = dist < 14 ? clamp(1.4 - dist / 14, 0.35, 1.2) : 0;
   updateHeartbeat(beatRate);
 }
 
-// ---------- Audio (WebAudio, no assets) ----------
-let AC = null, master = null, droneNodes = null, noiseBuf = null;
+// ---------- Audio ----------
+let AC = null, master = null, noiseBuf = null;
 let heartTimer = 0;
 
 function initAudio() {
@@ -714,7 +895,6 @@ function initAudio() {
   o1.connect(filt); o2.connect(filt);
   filt.connect(g); g.connect(master);
   o1.start(); o2.start();
-  droneNodes = { o1, o2, g };
 }
 
 function playFootstep() {
@@ -851,14 +1031,33 @@ function updateHeartbeat(rate) {
 function startGame() {
   initAudio();
   if (AC && AC.state === 'suspended') AC.resume();
+  if (builtMap !== S.map) buildWorld(S.map);
+
+  S.fuses = 0;
+  S.battery = 100;
+  S.flashlight = true;
+  S.stamina = 100;
+  S.exitOpen = false;
+  S.time = 0;
+  S.deathTimer = -1;
+  S.dead = false;
+  S.won = false;
+  touchInput.sprint = false;
+  document.getElementById('btn-sprint').classList.remove('active');
+  fusesEl.textContent = `🔋 0 / ${FUSE_COUNT}`;
+  objectiveEl.textContent = 'Найди 6 предохранителей и открой дверь';
+  doorGroup.userData.sign.color.setHex(0xff2020);
+  for (const it of items) { it.taken = false; it.mesh.visible = true; }
+
   menuOverlay.classList.add('hidden');
   deathOverlay.classList.add('hidden');
   winOverlay.classList.add('hidden');
   hud.classList.remove('hidden');
   S.started = true;
+
   if (IS_TOUCH) {
     S.playing = true;
-    if (!S.startTime) S.startTime = performance.now();
+    S.startTime = performance.now();
     if (document.documentElement.requestFullscreen) {
       document.documentElement.requestFullscreen().catch(() => {});
     }
@@ -867,6 +1066,15 @@ function startGame() {
   S.playing = false;
   canvas.requestPointerLock();
 }
+
+document.querySelectorAll('.map-card').forEach(card => {
+  card.addEventListener('click', () => {
+    document.querySelectorAll('.map-card').forEach(c => c.classList.remove('selected'));
+    card.classList.add('selected');
+    S.map = card.dataset.map;
+    buildWorld(S.map);
+  });
+});
 
 document.getElementById('start-btn').addEventListener('click', startGame);
 document.getElementById('retry-btn').addEventListener('click', () => location.reload());
@@ -896,15 +1104,16 @@ document.addEventListener('pointerlockchange', () => {
 function die() {
   S.dead = true;
   S.playing = false;
+  jumpscareEl.classList.remove('on');
   damageFlash.style.opacity = 0.9;
   const secs = Math.round(S.time);
   setTimeout(() => {
     document.exitPointerLock();
-    deathStats.textContent = `Предохранители: ${S.fuses}/${FUSE_COUNT} · Время: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    deathStats.textContent = `Карта: ${MAPS[S.map].name || S.map} · Предохранители: ${S.fuses}/${FUSE_COUNT} · Время: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     deathOverlay.classList.remove('hidden');
     hud.classList.add('hidden');
     damageFlash.style.opacity = 0;
-  }, 900);
+  }, 400);
 }
 
 // ---------- Main loop ----------
@@ -942,5 +1151,23 @@ function loop(now) {
 
   renderer.render(scene, camera);
 }
+
+buildWorld('yard');
+
+camera.position.set(player.pos.x, EYE_HEIGHT, player.pos.z);
+camera.rotation.set(0, player.yaw, 0);
+flashlight.position.copy(camera.position);
+flashlight.target.position.set(player.pos.x, EYE_HEIGHT, player.pos.z - 10);
+playerLight.position.copy(camera.position);
+flashlight.visible = false;
+
+setTimeout(checkOrientation, 0);
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+window.addEventListener('orientationchange', () => setTimeout(checkOrientation, 120));
+
 requestAnimationFrame(loop);
 window.__gameBooted = true;

@@ -6,54 +6,70 @@
 <title>THE MONSTER — 3D хоррор</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
-  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Courier New', monospace; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Arial Black', 'Segoe UI', Arial, sans-serif; }
   #game-canvas { display: block; }
 
   .overlay {
     position: fixed; inset: 0; display: flex; flex-direction: column;
     align-items: center; justify-content: center; text-align: center;
-    background: radial-gradient(ellipse at center, rgba(10,0,0,0.85), rgba(0,0,0,0.97));
-    color: #c9c2b8; z-index: 20; padding: 24px;
+    background:
+      repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 4px),
+      radial-gradient(ellipse at 50% 30%, #1a0505 0%, #0a0a0a 55%, #000 100%);
+    color: #d6d2ca; z-index: 20; padding: 20px;
   }
   .hidden { display: none !important; }
 
   h1.title {
-    font-size: clamp(42px, 9vw, 110px); letter-spacing: 0.18em; color: #b30000;
-    text-shadow: 0 0 18px rgba(179,0,0,0.8), 0 0 60px rgba(179,0,0,0.4);
-    margin-bottom: 8px; font-weight: 900;
+    font-family: 'Arial Black', Arial, sans-serif;
+    font-size: clamp(38px, 8vw, 96px); letter-spacing: 0.06em; color: #e8e4dc;
+    text-shadow: 0 0 4px #000, 4px 4px 0 #7a0000, 0 0 40px rgba(198,40,40,0.5);
+    margin-bottom: 6px; font-weight: 900; text-transform: uppercase;
+    transform: skewX(-4deg);
   }
-  .subtitle { color: #6f6a62; letter-spacing: 0.35em; font-size: 13px; margin-bottom: 34px; }
+  .subtitle { color: #8a847a; letter-spacing: 0.4em; font-size: 12px; margin-bottom: 26px; font-weight: 700; }
 
   .btn {
-    background: transparent; border: 1px solid #b30000; color: #d8d2c8;
-    font-family: inherit; font-size: 20px; letter-spacing: 0.25em;
-    padding: 14px 46px; cursor: pointer; transition: all 0.2s;
+    background: #141414; border: 2px solid #2c2c2c; border-left: 6px solid #c62828;
+    color: #e8e4dc; font-family: inherit; font-size: 19px; letter-spacing: 0.18em;
+    padding: 14px 52px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; font-weight: 900;
   }
-  .btn:hover { background: #b30000; color: #000; box-shadow: 0 0 30px rgba(179,0,0,0.6); }
+  .btn:hover { background: #c62828; border-color: #c62828; color: #000; box-shadow: 0 0 26px rgba(198,40,40,0.55); }
 
-  .help { margin-top: 36px; font-size: 14px; line-height: 2; color: #8a847a; }
+  .help { margin-top: 26px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
   .help b { color: #c9c2b8; }
-  .flicker { animation: flicker 2.4s infinite; }
-  @keyframes flicker { 0%,100%{opacity:1} 92%{opacity:1} 93%{opacity:0.25} 94%{opacity:1} 96%{opacity:0.4} 97%{opacity:1} }
+
+  /* Map cards */
+  .map-row { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; justify-content: center; }
+  .map-card {
+    width: 158px; padding: 16px 10px 13px; cursor: pointer;
+    background: #121212; border: 2px solid #2c2c2c; transition: all 0.15s;
+  }
+  .map-card:hover { border-color: #6a1a1a; }
+  .map-card.selected { border-color: #c62828; background: #1c0b0b; box-shadow: 0 0 22px rgba(198,40,40,0.4); }
+  .map-icon { font-size: 40px; margin-bottom: 8px; filter: grayscale(0.3) brightness(0.9); }
+  .map-name { font-size: 14px; letter-spacing: 0.1em; color: #e8e4dc; font-weight: 900; text-transform: uppercase; }
+  .map-desc { font-size: 10px; color: #7d776d; margin-top: 5px; font-family: 'Courier New', monospace; font-weight: 700; }
+  .map-card.selected .map-name { color: #ff5a4a; }
 
   /* HUD */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
   #objective {
-    position: absolute; top: 18px; left: 50%; transform: translateX(-50%);
-    color: #9a948a; font-size: 15px; letter-spacing: 0.12em;
-    text-shadow: 0 0 8px #000; transition: opacity 0.5s;
+    position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
+    color: #d6d2ca; font-size: 14px; letter-spacing: 0.1em; font-weight: 900; text-transform: uppercase;
+    text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.45); padding: 6px 16px;
+    border-left: 4px solid #c62828; transition: opacity 0.5s; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
   #fuses {
-    position: absolute; top: 44px; left: 50%; transform: translateX(-50%);
-    color: #d8b23a; font-size: 14px; letter-spacing: 0.12em; text-shadow: 0 0 8px #000;
+    position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
+    color: #e0b53a; font-size: 13px; letter-spacing: 0.12em; font-weight: 900; text-shadow: 2px 2px 0 #000;
   }
-  .bar-wrap { position: absolute; left: 26px; bottom: 26px; width: 190px; }
-  .bar-label { color: #8a847a; font-size: 12px; letter-spacing: 0.2em; margin-bottom: 4px; }
-  .bar { height: 9px; background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.18); }
+  .bar-wrap { position: absolute; left: 20px; bottom: 22px; width: 180px; }
+  .bar-label { color: #b5afa5; font-size: 10px; letter-spacing: 0.22em; margin-bottom: 4px; font-weight: 900; text-shadow: 1px 1px 0 #000; }
+  .bar { height: 10px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.22); }
   .bar > div { height: 100%; width: 100%; transition: width 0.15s linear; }
-  #battery-fill { background: #d8b23a; box-shadow: 0 0 8px rgba(216,178,58,0.7); }
-  #stamina-wrap { position: absolute; left: 26px; bottom: 78px; width: 190px; }
-  #stamina-fill { background: #7a1f1f; box-shadow: 0 0 8px rgba(179,0,0,0.6); }
+  #battery-fill { background: #e0b53a; box-shadow: 0 0 8px rgba(224,181,58,0.7); }
+  #stamina-wrap { position: absolute; left: 20px; bottom: 72px; width: 180px; }
+  #stamina-fill { background: #c62828; box-shadow: 0 0 8px rgba(198,40,40,0.7); }
 
   #crosshair {
     position: absolute; top: 50%; left: 50%; width: 5px; height: 5px;
@@ -68,18 +84,36 @@
     position: fixed; inset: 0; pointer-events: none; z-index: 13; opacity: 0; background: #7a0000;
   }
   #msg {
-    position: absolute; bottom: 130px; left: 50%; transform: translateX(-50%);
-    color: #d8d2c8; font-size: 17px; letter-spacing: 0.15em; text-shadow: 0 0 10px #000;
-    opacity: 0; transition: opacity 0.4s; text-align: center;
+    position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+    color: #e8e4dc; font-size: 15px; letter-spacing: 0.12em; font-weight: 900;
+    text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.5); padding: 7px 16px;
+    border-left: 4px solid #c62828; opacity: 0; transition: opacity 0.4s; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
 
-  #death-overlay h1 { color: #b30000; font-size: clamp(36px, 7vw, 80px); letter-spacing: 0.2em; }
-  #death-overlay p, #win-overlay p { margin-top: 14px; color: #8a847a; font-size: 16px; letter-spacing: 0.1em; }
-  #win-overlay h1 { color: #3f7a3f; font-size: clamp(36px, 7vw, 80px); letter-spacing: 0.2em; text-shadow: 0 0 20px rgba(63,122,63,0.6); }
+  #jumpscare { position: fixed; inset: 0; z-index: 30; background: #000; display: none; align-items: center; justify-content: center; overflow: hidden; }
+  #jumpscare.on { display: flex; animation: scare-shake 0.07s linear infinite; }
+  #jumpscare svg { width: 82vmin; height: 82vmin; animation: scare-zoom 0.8s cubic-bezier(0.2, 1.6, 0.4, 1) forwards; }
+  @keyframes scare-zoom {
+    0% { transform: scale(0.2); opacity: 0.4; }
+    55% { transform: scale(1.25); opacity: 1; }
+    100% { transform: scale(1.45); }
+  }
+  @keyframes scare-shake {
+    0% { transform: translate(0, 0); } 25% { transform: translate(-9px, 7px); }
+    50% { transform: translate(8px, -6px); } 75% { transform: translate(-6px, -9px); }
+    100% { transform: translate(7px, 5px); }
+  }
 
-  #pause-overlay { background: rgba(0,0,0,0.82); cursor: pointer; }
-  #pause-overlay h2 { color: #c9c2b8; letter-spacing: 0.3em; font-size: 28px; }
-  #pause-overlay p { margin-top: 16px; color: #8a847a; font-size: 14px; }
+  #death-overlay h1, #win-overlay h1 {
+    font-size: clamp(32px, 6.5vw, 72px); letter-spacing: 0.08em; text-transform: uppercase; transform: skewX(-4deg);
+  }
+  #death-overlay h1 { color: #ff3b2a; text-shadow: 4px 4px 0 #4d0000, 0 0 40px rgba(255,59,42,0.5); }
+  #win-overlay h1 { color: #6fd66f; text-shadow: 4px 4px 0 #0c3a0c, 0 0 40px rgba(111,214,111,0.4); }
+  #death-overlay p, #win-overlay p { margin-top: 14px; color: #8a847a; font-size: 14px; font-family: 'Courier New', monospace; font-weight: 700; }
+
+  #pause-overlay { background: rgba(0,0,0,0.85); cursor: pointer; }
+  #pause-overlay h2 { color: #e8e4dc; letter-spacing: 0.3em; font-size: 26px; text-transform: uppercase; border-left: 6px solid #c62828; padding-left: 16px; }
+  #pause-overlay p { margin-top: 16px; color: #8a847a; font-size: 13px; font-family: 'Courier New', monospace; font-weight: 700; }
 
   /* Touch controls */
   html, body, #game-canvas { touch-action: none; -webkit-tap-highlight-color: transparent; }
@@ -102,12 +136,10 @@
     display: flex; align-items: center; justify-content: center;
     touch-action: none;
   }
-  .tbtn.active { background: rgba(179,0,0,0.55); border-color: #b30000; }
+  .tbtn.active { background: rgba(198,40,40,0.55); border-color: #c62828; }
   #btn-flash { right: 128px; bottom: 160px; }
   #btn-sprint { right: 38px; bottom: 140px; }
-  #btn-pause {
-    top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px;
-  }
+  #btn-pause { top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px; }
   #rotate-overlay { z-index: 40; background: #000; }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
   @keyframes rotate-hint { 0%,20% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
@@ -134,14 +166,46 @@
 <div id="vignette"></div>
 <div id="damage-flash"></div>
 
+<div id="jumpscare">
+  <svg viewBox="0 0 220 240">
+    <ellipse cx="110" cy="120" rx="78" ry="100" fill="#b8b0a4"/>
+    <ellipse cx="110" cy="52" rx="60" ry="26" fill="#8f887c"/>
+    <ellipse cx="78" cy="95" rx="24" ry="30" fill="#050505"/>
+    <ellipse cx="142" cy="95" rx="24" ry="30" fill="#050505"/>
+    <circle cx="80" cy="102" r="6" fill="#ff2020"/>
+    <circle cx="140" cy="102" r="6" fill="#ff2020"/>
+    <path d="M70 158 Q110 216 150 158 Q110 184 70 158 Z" fill="#1c0303"/>
+    <path d="M80 162 l6 15 6-13 6 15 6-14 6 15 6-14 6 15 6-14 6 15 6-13 6 14 5-14" stroke="#d8d2c8" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
+    <path d="M36 66 Q58 30 92 42" stroke="#6b645c" stroke-width="2" fill="none"/>
+    <path d="M184 66 Q162 30 128 42" stroke="#6b645c" stroke-width="2" fill="none"/>
+    <path d="M96 190 Q104 200 100 212 M118 192 Q114 204 122 214" stroke="#5a544c" stroke-width="2" fill="none"/>
+  </svg>
+</div>
+
 <div id="menu-overlay" class="overlay">
-  <h1 class="title flicker">THE MONSTER</h1>
-  <div class="subtitle">ОНО УЖЕ ЗНАЕТ, ЧТО ТЫ ЗДЕСЬ</div>
+  <h1 class="title">THE MONSTER</h1>
+  <div class="subtitle">ВЫБЕРИ КАРТУ</div>
+  <div class="map-row">
+    <div class="map-card selected" data-map="yard">
+      <div class="map-icon">🏚️</div>
+      <div class="map-name">Двор</div>
+      <div class="map-desc">Старый двор-лабиринт, фонари</div>
+    </div>
+    <div class="map-card" data-map="forest">
+      <div class="map-icon">🌲</div>
+      <div class="map-name">Лес</div>
+      <div class="map-desc">Ночной лес, деревья и туман</div>
+    </div>
+    <div class="map-card" data-map="city">
+      <div class="map-icon">☣️</div>
+      <div class="map-name">Заражённый город</div>
+      <div class="map-desc">Токсичные улицы и бочки</div>
+    </div>
+  </div>
   <button class="btn" id="start-btn">ИГРАТЬ</button>
   <div class="help">
-    <b>WASD</b> — движение &nbsp;·&nbsp; <b>МЫШЬ</b> — осмотр &nbsp;·&nbsp; <b>SHIFT</b> — бег<br>
-    <b>F</b> — фонарик (свет помогает видеть, но ОНО видит свет)<br>
-    Собери <b>6 предохранителей</b> и найди выход. Не дай ему подойти.
+    <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
+    Собери <b>6 предохранителей</b> и найди выход. Свет помогает видеть, но ОНО видит свет.
   </div>
 </div>
 
@@ -164,8 +228,8 @@
 
 <div id="rotate-overlay" class="overlay hidden">
   <div class="icon">📱</div>
-  <h2>ПОВЕРНИ ТЕЛЕФОН ГОРИЗОНТАЛЬНО</h2>
-  <p>Игра рассчитана на альбомный режим</p>
+  <h2 style="font-size:20px; letter-spacing:0.2em;">ПОВЕРНИ ТЕЛЕФОН ГОРИЗОНТАЛЬНО</h2>
+  <p style="margin-top:12px; color:#8a847a; font-size:13px;">Игра рассчитана на альбомный режим</p>
 </div>
 
 <div id="touch-ui">
@@ -188,6 +252,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=3"></script>
+<script type="module" src="game.js?v=4"></script>
 </body>
 </html>
