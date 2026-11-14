@@ -531,7 +531,7 @@ function setMonsterPath(ti, tj, interval) {
 function updateMonster(dt) {
   const pt = [Math.floor(player.pos.x / TILE), Math.floor(player.pos.z / TILE)];
   const mt = [Math.floor(M.pos.x / TILE), Math.floor(M.pos.z / TILE)];
-  const dist = M.pos.distanceTo(player.pos);
+  const dist = Math.hypot(M.pos.x - player.pos.x, M.pos.z - player.pos.z);
 
   let detect = 9 + S.fuses * 2;
   if (S.flashlight && S.battery > 0) detect += 7;
@@ -593,7 +593,7 @@ function updateMonster(dt) {
   monster.position.copy(M.pos);
   monster.position.y = Math.abs(Math.sin(M.walkPhase)) * 0.12;
 
-  if (dist < 1.15 && S.deathTimer < 0) {
+  if (dist < 1.1 && S.deathTimer < 0) {
     S.deathTimer = 0;
     jumpscareEl.classList.add('on');
     playScream();
@@ -863,7 +863,7 @@ function showMsg(text) {
 }
 
 function updateFX(dt) {
-  const dist = M.pos.distanceTo(player.pos);
+  const dist = Math.hypot(M.pos.x - player.pos.x, M.pos.z - player.pos.z);
   const prox = clamp(1 - dist / 11, 0, 1);
   vignette.style.opacity = prox.toFixed(2);
   S.shake = prox * prox * (M.state === 'chase' ? 1.4 : 0.5);
