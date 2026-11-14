@@ -1707,6 +1707,9 @@ function nukeDevastation(p, radius) {
     if (n.type === 'god') continue;
     removeNPC(n);
   }
+  crimes = 0;
+  crimeTimer = 0;
+  copSpawnT = 0;
   for (const o of [...objects]) removeObject(o);
   const zeroM = new THREE.Matrix4();
   const _im = new THREE.Matrix4();
