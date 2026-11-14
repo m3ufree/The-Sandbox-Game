@@ -31,6 +31,8 @@ const pauseOverlay = document.getElementById('pause-overlay');
 const rotateOverlay = document.getElementById('rotate-overlay');
 const joyBase = document.getElementById('joy-base');
 const joyKnob = document.getElementById('joy-knob');
+const promptEl = document.getElementById('prompt');
+const btnCar = document.getElementById('btn-car');
 
 // ---------- Game state ----------
 const S = {
@@ -38,6 +40,7 @@ const S = {
   started: false, playing: false,
   sel: 0, night: false,
   shakeT: 0, pausedByRotate: false,
+  driving: null,
 };
 
 // ---------- Renderer / scene ----------
@@ -241,8 +244,14 @@ function generateGrid(map) {
         if (grid[idx(hi + a, hj + b)] !== 0) { clear = false; break; }
       }
       if (!clear) continue;
-      for (let a = 0; a < w; a++) for (let b = 0; b < d; b++) grid[idx(hi + a, hj + b)] = 2;
-      houseRects.push({ hi, hj, w, d });
+      if (hi < 4 && hj < 4) continue;
+      for (let a = 0; a < w; a++) for (let b = 0; b < d; b++) {
+        const edge = a === 0 || b === 0 || a === w - 1 || b === d - 1;
+        grid[idx(hi + a, hj + b)] = edge ? 2 : 0;
+      }
+      const door = Math.floor(w / 2);
+      grid[idx(hi + door, hj + d - 1)] = 0;
+      houseRects.push({ hi, hj, w, d, door });
     }
     for (let f = 0; f < 10; f++) {
       const fi = 2 + randInt(GW - 8), fj = 2 + randInt(GH - 8);
@@ -443,11 +452,15 @@ function addCityProps() {
     car.position.set(c.x, 0, c.z);
     car.rotation.y = Math.random() < 0.5 ? 0 : Math.PI / 2;
     worldGroup.add(car);
+    objects.push({ mesh: car, vel: new THREE.Vector3(), tnt: false, type: 'car' });
   }
 }
 
 function addVillageProps() {
-  const spots = floors.filter(([i, j]) => Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 6);
+  const inHouse = (i, j) => houseRects.some(r => i >= r.hi && i < r.hi + r.w && j >= r.hj && j < r.hj + r.d);
+  const spots = floors.filter(([i, j]) =>
+    Math.abs(i - spawnTile[0]) + Math.abs(j - spawnTile[1]) > 6 && !inHouse(i, j)
+  );
   spots.sort(() => Math.random() - 0.5);
   for (let k = 0; k < 8 && k < spots.length; k++) {
     const c = tileCenter(spots[k][0], spots[k][1]);
@@ -479,21 +492,41 @@ function buildVillageHouses() {
   for (const r of houseRects) {
     const W = r.w * TILE, D = r.d * TILE;
     const g = new THREE.Group();
-    const wallMat = new THREE.MeshStandardMaterial({ color: HOUSE_WALLS[randInt(HOUSE_WALLS.length)], roughness: 0.95, side: THREE.DoubleSide });
+    const wallMat = new THREE.MeshStandardMaterial({ color: HOUSE_WALLS[randInt(HOUSE_WALLS.length)], roughness: 0.95 });
     const roofMat = new THREE.MeshStandardMaterial({ color: ROOF_COLS[randInt(ROOF_COLS.length)], roughness: 0.9 });
     const trimMat = new THREE.MeshStandardMaterial({ color: 0x5a4632, roughness: 1 });
+    const ceilMat = new THREE.MeshStandardMaterial({ color: 0xd8d0c0, roughness: 1 });
     const glassMat = new THREE.MeshStandardMaterial({ color: 0x1c2833, emissive: 0xffc866, emissiveIntensity: 0.12, roughness: 0.3 });
     windowMats.push(glassMat);
 
     const H = 3.0;
-    const walls = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), wallMat);
-    walls.position.y = H / 2 + 0.15;
+    const floor = new THREE.Mesh(
+      new THREE.BoxGeometry(W - 0.2, 0.12, D - 0.2),
+      new THREE.MeshStandardMaterial({ color: 0x6a4e2c, roughness: 1 })
+    );
+    floor.position.y = 0.06;
     const found = new THREE.Mesh(
       new THREE.BoxGeometry(W + 0.3, 0.3, D + 0.3),
       new THREE.MeshStandardMaterial({ color: 0x8a8a84, roughness: 1 })
     );
     found.position.y = 0.15;
-    g.add(walls, found);
+    const ceil = new THREE.Mesh(new THREE.BoxGeometry(W, 0.2, D), ceilMat);
+    ceil.position.y = H + 0.1;
+    g.add(floor, found, ceil);
+
+    const wallSeg = (x0, x1, z0, z1) => {
+      const seg = new THREE.Mesh(
+        new THREE.BoxGeometry((x1 - x0) * TILE, H, (z1 - z0) * TILE),
+        wallMat
+      );
+      seg.position.set(((x0 + x1) / 2 - r.w / 2) * TILE, H / 2, ((z0 + z1) / 2 - r.d / 2) * TILE);
+      g.add(seg);
+    };
+    wallSeg(0, r.w, 0, 1);
+    wallSeg(0, r.door, r.d - 1, r.d);
+    wallSeg(r.door + 1, r.w, r.d - 1, r.d);
+    wallSeg(0, 1, 1, r.d - 1);
+    wallSeg(r.w - 1, r.w, 1, r.d - 1);
 
     const ridgeZ = D >= W;
     const span = (ridgeZ ? W : D) / 2 + 0.45;
@@ -534,10 +567,15 @@ function buildVillageHouses() {
     else chim.position.set(rand(-W / 4, W / 4), H + rise * 0.75 + 0.5, rand(-0.6, 0.6));
     g.add(chim);
 
-    const door = new THREE.Mesh(new THREE.BoxGeometry(1.1, 2.1, 0.14), trimMat);
-    if (ridgeZ) door.position.set(0, 1.2, D / 2 + 0.07);
-    else { door.rotation.y = Math.PI / 2; door.position.set(W / 2 + 0.07, 1.2, 0); }
-    g.add(door);
+    const doorX = (r.door + 0.5 - r.w / 2) * TILE;
+    for (const px of [doorX - TILE / 2, doorX + TILE / 2]) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, H, 0.4), trimMat);
+      post.position.set(px, H / 2, D / 2 - 0.1);
+      g.add(post);
+    }
+    const lintel = new THREE.Mesh(new THREE.BoxGeometry(TILE, 0.45, 0.4), trimMat);
+    lintel.position.set(doorX, H - 0.22, D / 2 - 0.1);
+    g.add(lintel);
 
     const addWin = (x, z, ry) => {
       const frame = new THREE.Mesh(frameGeo, trimMat);
@@ -549,18 +587,16 @@ function buildVillageHouses() {
       win.translateZ(0.03);
       g.add(frame, win);
     };
-    const fh = (ridgeZ ? W : D) / 4;
-    if (ridgeZ) {
-      addWin(-fh, D / 2 + 0.06, 0);
-      addWin(fh, D / 2 + 0.06, 0);
-      addWin(W / 2 + 0.06, 0, Math.PI / 2);
-      if (D > 7) addWin(W / 2 + 0.06, D / 3, Math.PI / 2);
-    } else {
-      addWin(W / 2 + 0.06, -fh, Math.PI / 2);
-      addWin(W / 2 + 0.06, fh, Math.PI / 2);
-      addWin(0, D / 2 + 0.06, 0);
-      if (W > 7) addWin(W / 3, D / 2 + 0.06, 0);
+    if (r.door > 0) addWin(((0 + r.door) / 2 - r.w / 2) * TILE, D / 2 + 0.06, 0);
+    if (r.door < r.w - 1) addWin(((r.door + 1 + r.w) / 2 - r.w / 2) * TILE, D / 2 + 0.06, 0);
+    addWin(W / 2 + 0.06, 0, Math.PI / 2);
+    if (r.d >= 5) {
+      addWin(W / 2 + 0.06, (D / 2 - TILE) * 0.55, Math.PI / 2);
+      addWin(W / 2 + 0.06, -(D / 2 - TILE) * 0.55, Math.PI / 2);
     }
+    addWin(-W / 2 - 0.06, 0, Math.PI / 2);
+    addWin(-W / 4, -D / 2 - 0.06, 0);
+    if (W > 7) addWin(W / 4, -D / 2 - 0.06, 0);
 
     g.position.set((r.hi + r.w / 2) * TILE, 0, (r.hj + r.d / 2) * TILE);
     worldGroup.add(g);
@@ -572,6 +608,8 @@ function buildWorld(map) {
   generateGrid(map);
   const cfg = MAPS[map];
   worldGroup = new THREE.Group();
+  objects = [];
+  if (S.driving) { S.driving = null; stopEngine(); }
 
   windowMats.length = 0;
   const groundTex = makeGroundTexture(map);
@@ -592,7 +630,6 @@ function buildWorld(map) {
 
   spawnedGroup = new THREE.Group();
   worldGroup.add(spawnedGroup);
-  objects = [];
   lampLights = 0;
 
   scene.add(worldGroup);
@@ -612,7 +649,11 @@ const player = {
   pos: new THREE.Vector3((spawnTile[0] + 0.5) * TILE, EYE_HEIGHT, (spawnTile[1] + 0.5) * TILE),
   yaw: Math.PI * 0.75, pitch: 0,
   bobT: 0, stepT: 0, moving: false,
+  vy: 0, onGround: true,
 };
+
+const carState = { speed: 0, heading: 0 };
+let engineOsc = null, engineGain = null;
 
 // ---------- Touch controls ----------
 const touchInput = { moveId: null, lookId: null, moveX: 0, moveZ: 0, lookLast: { x: 0, y: 0 } };
@@ -694,6 +735,13 @@ document.getElementById('btn-day').addEventListener('touchstart', (e) => {
   if (S.playing) toggleDayNight();
 }, { passive: false });
 
+btnCar.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (!S.playing) return;
+  if (S.driving) exitCar();
+  else { const c = nearestCar(); if (c) enterCar(c); }
+}, { passive: false });
+
 function checkOrientation() {
   if (!IS_TOUCH) return;
   const portrait = window.innerHeight > window.innerWidth;
@@ -718,6 +766,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') toggleFlashlight();
   if (e.code === 'KeyT') toggleDayNight();
   if (e.code === 'KeyX') deleteAimed();
+  if (e.code === 'KeyE') { if (S.driving) exitCar(); else { const c = nearestCar(); if (c) enterCar(c); } }
   const digit = e.code.match(/^Digit([1-8])$/);
   if (digit) selectSlot(parseInt(digit[1], 10) - 1);
   if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'Space', 'ShiftLeft'].includes(e.code)) e.preventDefault();
@@ -731,7 +780,7 @@ document.addEventListener('mousemove', (e) => {
 });
 
 canvas.addEventListener('mousedown', (e) => {
-  if (!S.playing) return;
+  if (!S.playing || S.driving) return;
   if (e.button === 0) spawnSelected();
   if (e.button === 2) deleteAimed();
 });
@@ -786,9 +835,25 @@ function updatePlayer(dt) {
     if (player.stepT <= 0) { player.stepT = 0.55; playFootstep(); }
   }
 
+  if (keys['Space'] && player.onGround) {
+    player.vy = 5.4;
+    player.onGround = false;
+    playPoof();
+  }
+  if (!player.onGround) {
+    player.vy -= 18 * dt;
+    player.pos.y += player.vy * dt;
+    if (player.pos.y <= EYE_HEIGHT) {
+      player.pos.y = EYE_HEIGHT;
+      player.vy = 0;
+      player.onGround = true;
+      playFootstep();
+    }
+  }
+
   camera.position.set(
     player.pos.x,
-    EYE_HEIGHT + (player.moving ? Math.sin(player.bobT) * 0.05 : 0),
+    player.pos.y + (player.moving ? Math.sin(player.bobT) * 0.05 : 0),
     player.pos.z
   );
   if (S.shakeT > 0) {
@@ -1049,7 +1114,7 @@ function buildTnt() {
 const CATALOG = [
   { name: 'ЯЩИК', icon: '📦', build: buildBox },
   { name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
-  { name: 'МАШИНА', icon: '🚗', build: buildCar },
+  { name: 'МАШИНА', icon: '🚗', build: buildCar, drive: true },
   { name: 'ДЕРЕВО', icon: '🌳', build: buildTree },
   { name: 'ФОНАРЬ', icon: '🏮', build: buildLamp },
   { name: 'СТОГ', icon: '🌾', build: buildHay },
@@ -1077,13 +1142,14 @@ function selectSlot(i) {
 }
 
 function spawnSelected() {
+  if (S.driving) return;
   const def = CATALOG[S.sel];
   const mesh = def.build();
   const dir = forwardFlat();
   mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
   mesh.rotation.y = player.yaw + Math.PI;
   spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt });
+  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop' });
   playPop();
 }
 
@@ -1091,10 +1157,16 @@ function removeObject(obj) {
   const i = objects.indexOf(obj);
   if (i === -1) return;
   objects.splice(i, 1);
-  spawnedGroup.remove(obj.mesh);
+  if (obj.mesh.parent) obj.mesh.parent.remove(obj.mesh);
   obj.mesh.traverse(o => {
     if (o.geometry) o.geometry.dispose();
-    if (o.material) o.material.dispose();
+    if (o.material) {
+      const mats = Array.isArray(o.material) ? o.material : [o.material];
+      for (const mt of mats) {
+        if (mt.map) mt.map.dispose();
+        mt.dispose();
+      }
+    }
   });
 }
 
@@ -1113,7 +1185,7 @@ function findAimed() {
 function deleteAimed() {
   if (!objects.length) return;
   const obj = findAimed();
-  if (!obj) return;
+  if (!obj || obj === S.driving) return;
   if (obj.tnt) explode(obj);
   else { removeObject(obj); playPoof(); }
 }
@@ -1127,7 +1199,7 @@ function deleteNearest() {
     const d = Math.hypot(o.mesh.position.x - tx, o.mesh.position.z - tz);
     if (d < bestD) { bestD = d; best = o; }
   }
-  if (!best) return;
+  if (!best || best === S.driving) return;
   if (best.tnt) explode(best);
   else { removeObject(best); playPoof(); }
 }
@@ -1156,6 +1228,7 @@ function explode(obj) {
 
 function updatePhysics(dt) {
   for (const o of objects) {
+    if (S.driving === o) { o.vel.set(0, 0, 0); continue; }
     if (o.vel.lengthSq() < 0.0001) continue;
     o.vel.y -= 18 * dt;
     o.mesh.position.addScaledVector(o.vel, dt);
@@ -1167,6 +1240,111 @@ function updatePhysics(dt) {
       if (o.vel.lengthSq() < 0.05) o.vel.set(0, 0, 0);
     }
   }
+}
+
+// ---------- Driving ----------
+function nearestCar() {
+  let best = null, bestD = 3.6;
+  for (const o of objects) {
+    if (o.type !== 'car') continue;
+    const d = Math.hypot(o.mesh.position.x - player.pos.x, o.mesh.position.z - player.pos.z);
+    if (d < bestD) { bestD = d; best = o; }
+  }
+  return best;
+}
+
+function carCollides(x, z, h) {
+  const fx = Math.sin(h), fz = Math.cos(h);
+  const rx = Math.cos(h), rz = -Math.sin(h);
+  for (const a of [-2.0, 0, 2.0]) for (const b of [-0.85, 0.85]) {
+    if (collides(x + fx * a + rx * b, z + fz * a + rz * b)) return true;
+  }
+  return false;
+}
+
+function enterCar(obj) {
+  S.driving = obj;
+  carState.speed = 0;
+  carState.heading = obj.mesh.rotation.y;
+  startEngine();
+  showMsg('🚗 WASD / джойстик — езда · E — выйти');
+  playClick();
+}
+
+function exitCar() {
+  const obj = S.driving;
+  if (!obj) return;
+  const h = carState.heading;
+  const fx = Math.sin(h), fz = Math.cos(h);
+  const rx = Math.cos(h), rz = -Math.sin(h);
+  const cands = [
+    [obj.mesh.position.x + rx * 2.3, obj.mesh.position.z + rz * 2.3],
+    [obj.mesh.position.x - rx * 2.3, obj.mesh.position.z - rz * 2.3],
+    [obj.mesh.position.x - fx * 3.6, obj.mesh.position.z - fz * 3.6],
+  ];
+  for (const [x, z] of cands) {
+    if (!collides(x, z)) { player.pos.set(x, EYE_HEIGHT, z); break; }
+    player.pos.set(obj.mesh.position.x, EYE_HEIGHT, obj.mesh.position.z);
+  }
+  S.driving = null;
+  stopEngine();
+  player.vy = 0;
+  player.onGround = true;
+  playClick();
+}
+
+function updateCar(dt) {
+  const obj = S.driving;
+  if (!obj) return;
+  const joy = touchInput.moveId !== null;
+  const throttle = joy ? -touchInput.moveZ : ((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0));
+  const steer = joy ? touchInput.moveX : ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0));
+  carState.speed += throttle * 9 * dt;
+  carState.speed *= (1 - 1.1 * dt);
+  carState.speed = clamp(carState.speed, -7, 16);
+  carState.heading += steer * dt * 2.1 * clamp(Math.abs(carState.speed) / 6, 0, 1) * (carState.speed < 0 ? -1 : 1);
+  const fx = Math.sin(carState.heading), fz = Math.cos(carState.heading);
+  const nx = obj.mesh.position.x + fx * carState.speed * dt;
+  const nz = obj.mesh.position.z + fz * carState.speed * dt;
+  if (carCollides(nx, nz, carState.heading)) {
+    if (Math.abs(carState.speed) > 7) { S.shakeT = 0.3; playBoom(); }
+    carState.speed = 0;
+  } else {
+    obj.mesh.position.x = nx;
+    obj.mesh.position.z = nz;
+  }
+  obj.mesh.rotation.y = carState.heading;
+  obj.vel.set(0, 0, 0);
+  player.pos.set(obj.mesh.position.x, EYE_HEIGHT, obj.mesh.position.z);
+  if (engineOsc && engineGain) {
+    engineOsc.frequency.value = 55 + Math.abs(carState.speed) * 9;
+    engineGain.gain.value = Math.min(0.09, 0.025 + Math.abs(carState.speed) * 0.004);
+  }
+}
+
+function startEngine() {
+  if (!AC || engineOsc) return;
+  engineOsc = AC.createOscillator();
+  engineOsc.type = 'sawtooth';
+  engineOsc.frequency.value = 60;
+  const f = AC.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = 340;
+  engineGain = AC.createGain();
+  engineGain.gain.value = 0.0001;
+  engineOsc.connect(f);
+  f.connect(engineGain);
+  engineGain.connect(master);
+  engineOsc.start();
+}
+
+function stopEngine() {
+  if (!engineOsc) return;
+  const o = engineOsc;
+  engineGain.gain.setTargetAtTime(0, AC.currentTime, 0.06);
+  setTimeout(() => { try { o.stop(); } catch (e) {} }, 350);
+  engineOsc = null;
+  engineGain = null;
 }
 
 // ---------- HUD ----------
@@ -1289,8 +1467,8 @@ function startGame() {
   hud.classList.remove('hidden');
   mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
   hintEl.textContent = IS_TOUCH
-    ? '➕ поставить · 🗑️ удалить · 🌓 день/ночь'
-    : 'ЛКМ — поставить · ПКМ/X — удалить · T — день/ночь';
+    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🌓 день/ночь'
+    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · Space — прыжок · T — день/ночь';
   S.started = true;
 
   if (IS_TOUCH) {
@@ -1343,11 +1521,31 @@ function loop(now) {
 
   if (S.started) {
     if (S.playing) {
-      updatePlayer(dt);
+      if (S.driving) {
+        updateCar(dt);
+        const obj = S.driving;
+        const fx = Math.sin(carState.heading), fz = Math.cos(carState.heading);
+        const target = new THREE.Vector3(obj.mesh.position.x - fx * 7.5, 3.4, obj.mesh.position.z - fz * 7.5);
+        camera.position.lerp(target, 1 - Math.pow(0.001, dt));
+        camera.lookAt(obj.mesh.position.x, 1.2, obj.mesh.position.z);
+        playerLight.position.copy(camera.position);
+        promptEl.textContent = 'E — выйти из машины';
+        promptEl.style.opacity = 1;
+      } else {
+        updatePlayer(dt);
+        const near = nearestCar();
+        if (near) {
+          promptEl.textContent = IS_TOUCH ? '🚗 — сесть в машину' : 'E — сесть в машину';
+          promptEl.style.opacity = 1;
+        } else if (promptEl.style.opacity) {
+          promptEl.style.opacity = 0;
+        }
+        btnCar.classList.toggle('nearest', !!near || !!S.driving);
+      }
       updatePhysics(dt);
       updateFX(dt);
     } else {
-      camera.position.set(player.pos.x, EYE_HEIGHT, player.pos.z);
+      camera.position.set(player.pos.x, player.pos.y, player.pos.z);
       camera.rotation.set(player.pitch, player.yaw, 0);
       const dir = new THREE.Vector3(0, 0, -1).applyEuler(camera.rotation);
       flashlight.position.copy(camera.position);

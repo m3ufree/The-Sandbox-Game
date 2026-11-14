@@ -71,6 +71,14 @@
     border-left: 4px solid #d89628; opacity: 0; transition: opacity 0.4s; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
 
+  #prompt {
+    position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%);
+    color: #ffd98a; font-size: 14px; letter-spacing: 0.1em; font-weight: 900;
+    text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.55); padding: 6px 14px;
+    border-left: 4px solid #d89628; opacity: 0; transition: opacity 0.25s;
+    white-space: nowrap; max-width: 94vw; overflow: hidden;
+  }
+
   #hotbar {
     position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
     display: flex; gap: 6px;
@@ -118,6 +126,8 @@
   #btn-spawn { right: 38px; bottom: 140px; width: 76px; height: 76px; font-size: 32px; }
   #btn-del { right: 130px; bottom: 160px; }
   #btn-day { right: 216px; bottom: 140px; }
+  #btn-car { right: 302px; bottom: 160px; display: none; }
+  body.touch #btn-car.nearest { display: flex; }
   #btn-pause { top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px; }
   #rotate-overlay { z-index: 40; background: #000; }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
@@ -131,6 +141,7 @@
   <div id="mapname">ДВОР</div>
   <div id="hint">ЛКМ — поставить · ПКМ/X — удалить · 1-8 — выбор · T — день/ночь</div>
   <div id="crosshair"></div>
+  <div id="prompt"></div>
   <div id="msg"></div>
   <div id="hotbar"></div>
 </div>
@@ -183,6 +194,7 @@
   <div class="tbtn" id="btn-spawn">➕</div>
   <div class="tbtn" id="btn-del">🗑️</div>
   <div class="tbtn" id="btn-day">🌓</div>
+  <div class="tbtn" id="btn-car">🚗</div>
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
@@ -199,6 +211,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=10"></script>
+<script type="module" src="game.js?v=11"></script>
 </body>
 </html>
