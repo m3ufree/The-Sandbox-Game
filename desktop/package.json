@@ -1,0 +1,20 @@
+{
+  "name": "the-sandbox-game",
+  "version": "1.0.0",
+  "description": "The Sandbox Game desktop app",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win portable"
+  },
+  "build": {
+    "appId": "com.m3ufree.sandboxgame",
+    "productName": "TheSandboxGame",
+    "directories": { "output": "dist" },
+    "win": { "target": ["portable"] }
+  },
+  "devDependencies": {
+    "electron": "^31.3.0",
+    "electron-builder": "^24.13.3"
+  }
+}

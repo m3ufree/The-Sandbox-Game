@@ -1,0 +1,74 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm install
+      - name: Build portable exe
+        working-directory: desktop
+        run: npx electron-builder --win portable
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-exe
+          path: desktop/dist/*.exe
+
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.7'
+      - name: Build debug APK
+        run: gradle -p android assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sandbox-apk
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  release:
+    needs: [exe, apk]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: sandbox-exe
+          path: rel
+      - uses: actions/download-artifact@v4
+        with:
+          name: sandbox-apk
+          path: rel
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: The Sandbox Game ${{ github.ref_name }}
+          body: |
+            ## Скачивания
+
+            - **TheSandboxGame...exe** — версия для Windows (portable, не требует установки). Запусти файл и играй.
+            - **app-debug.apk** — версия для Android. Скачай, открой, разреши установку из неизвестных источников.
+
+            Требуется интернет (игра грузит движок Three.js с CDN).
+
+            Играть в браузере: https://m3ufree.github.io/The-Sandbox-Game/
+          files: rel/*
