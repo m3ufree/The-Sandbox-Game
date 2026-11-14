@@ -2620,7 +2620,7 @@ function renderBag() {
     const n = bagCount(def.id);
     const row = document.createElement('div');
     row.className = 'bag-row' + (i === S.sel ? ' bsel' : '');
-    row.innerHTML = `<span>${def.icon}</span><span>${def.name}</span><span class="cnt">${n ? '×' + n : ''}</span><span class="add">＋</span>${n ? '<span class="rm">🗑</span>' : ''}`;
+    row.innerHTML = `<span>${def.icon}</span><span>${def.name}</span><span class="cnt">${n ? '×' + n : ''}</span><span class="add">＋ ПОСТАВИТЬ</span>${n ? '<span class="rm">🗑</span>' : ''}`;
     row.addEventListener('click', () => {
       selectSlot(i);
       closeBag();
