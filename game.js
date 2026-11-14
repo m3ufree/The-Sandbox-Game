@@ -1,4 +1,4 @@
-import * as THREE from 'three';
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js';
 
 // ============================================================
 //  THE MONSTER — 3D horror
@@ -943,3 +943,4 @@ function loop(now) {
   renderer.render(scene, camera);
 }
 requestAnimationFrame(loop);
+window.__gameBooted = true;

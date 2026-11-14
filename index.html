@@ -175,9 +175,19 @@
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
-<script type="importmap">
-{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js" } }
+<div id="boot-error" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:99; background:#3a0000; color:#ffb0b0; border:1px solid #b30000; padding:10px 14px; font:13px 'Courier New',monospace; border-radius:6px;"></div>
+<script>
+(function () {
+  var el = document.getElementById('boot-error');
+  function show(text) { el.style.display = 'block'; el.textContent = text; }
+  window.addEventListener('error', function (e) {
+    show('Ошибка: ' + (e.message || e.type));
+  });
+  setTimeout(function () {
+    if (!window.__gameBooted) show('Не удалось загрузить игру. Проверь интернет и обнови страницу.');
+  }, 6000);
+})();
 </script>
-<script type="module" src="game.js"></script>
+<script type="module" src="game.js?v=3"></script>
 </body>
 </html>
