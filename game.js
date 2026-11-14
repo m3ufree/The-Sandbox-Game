@@ -1620,6 +1620,11 @@ function spawnSelected() {
 
 function removeObject(obj) {
   if (S.tvObj === obj) stopTvScreen();
+  if (S.sitting === obj) {
+    S.sitting = null;
+    player.pos.y = EYE_HEIGHT;
+    player.onGround = true;
+  }
   const i = objects.indexOf(obj);
   if (i === -1) return;
   objects.splice(i, 1);
@@ -1670,6 +1675,84 @@ function deleteNearest() {
   else { removeObject(best); playPoof(); }
 }
 
+function nukeDevastation(p, radius) {
+  const flash = new THREE.PointLight(0xffa040, 520, 130, 1.5);
+  flash.position.copy(p).setY(1.5);
+  worldGroup.add(flash);
+  setTimeout(() => { if (worldGroup) worldGroup.remove(flash); }, 400);
+  const ball = new THREE.Mesh(
+    new THREE.SphereGeometry(1, 16, 12),
+    new THREE.MeshBasicMaterial({ color: 0xffa030, transparent: true, opacity: 0.85 })
+  );
+  ball.position.copy(p).setY(2);
+  worldGroup.add(ball);
+  const t0 = performance.now();
+  const grow = () => {
+    const t = (performance.now() - t0) / 1000;
+    if (!ball.parent) return;
+    if (t > 2.2) { worldGroup.remove(ball); return; }
+    ball.scale.setScalar(1 + t * 14);
+    ball.material.opacity = 0.85 * (1 - t / 2.2);
+    ball.position.y = 2 + t * 9;
+    requestAnimationFrame(grow);
+  };
+  grow();
+  const pd = Math.hypot(player.pos.x - p.x, player.pos.z - p.z);
+  if (pd < radius && !S.driving) {
+    player.vy = 14;
+    player.onGround = false;
+  }
+  if (S.driving) exitCar();
+  for (const n of [...npcs]) {
+    if (n.type === 'god') continue;
+    removeNPC(n);
+  }
+  for (const o of [...objects]) removeObject(o);
+  const zeroM = new THREE.Matrix4();
+  const _im = new THREE.Matrix4();
+  const _ip = new THREE.Vector3();
+  const _iq = new THREE.Quaternion();
+  const _is = new THREE.Vector3();
+  for (const child of [...worldGroup.children]) {
+    if (child === spawnedGroup) continue;
+    if (child.isInstancedMesh) {
+      let changed = false;
+      for (let k = 0; k < child.count; k++) {
+        child.getMatrixAt(k, _im);
+        _ip.setFromMatrixPosition(_im);
+        if (Math.hypot(_ip.x - p.x, _ip.z - p.z) < radius) {
+          _im.compose(_ip, _iq.identity(), _is.set(0.0001, 0.0001, 0.0001));
+          child.setMatrixAt(k, _im);
+          changed = true;
+        }
+      }
+      if (changed) child.instanceMatrix.needsUpdate = true;
+      continue;
+    }
+    const gp = child.geometry && child.geometry.parameters
+      ? Math.max(child.geometry.parameters.width || 0, child.geometry.parameters.height || 0, child.geometry.parameters.depth || 0)
+      : 0;
+    if (gp > 90) continue;
+    _ip.setFromMatrixPosition(child.matrixWorld);
+    if (Math.hypot(_ip.x - p.x, _ip.z - p.z) < radius) worldGroup.remove(child);
+  }
+  const ri = Math.ceil(radius / TILE);
+  const ci = Math.floor(p.x / TILE), cj = Math.floor(p.z / TILE);
+  for (let i = ci - ri; i <= ci + ri; i++) {
+    for (let j = cj - ri; j <= cj + ri; j++) {
+      if (i < 0 || j < 0 || i >= GW || j >= GH) continue;
+      if (Math.hypot((i + 0.5) * TILE - p.x, (j + 0.5) * TILE - p.z) < radius) grid[idx(i, j)] = 0;
+    }
+  }
+  const scorch = new THREE.Mesh(
+    new THREE.CircleGeometry(radius * 0.55, 32),
+    new THREE.MeshBasicMaterial({ color: 0x14100c, transparent: true, opacity: 0.85 })
+  );
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.position.set(p.x, 0.03, p.z);
+  worldGroup.add(scorch);
+}
+
 function explode(obj) {
   const p = obj.mesh.position.clone();
   const spec = obj.spec || BOMBS.tnt;
@@ -1680,6 +1763,10 @@ function explode(obj) {
   for (let k = 0; k < spec.crime; k++) commitCrime();
   panicPos.copy(p);
   panicT = 3;
+  if (spec.nuke) {
+    nukeDevastation(p, spec.radius);
+    return;
+  }
   for (const n of [...npcs]) {
     if (n.type === 'god' || n.downT > 0) continue;
     if (Math.hypot(n.mesh.position.x - p.x, n.mesh.position.z - p.z) < spec.radius * 0.8) knockNPC(n, 4);
