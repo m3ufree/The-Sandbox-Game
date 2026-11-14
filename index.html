@@ -75,6 +75,11 @@
     position: absolute; top: 50%; left: 50%; width: 5px; height: 5px;
     margin: -2.5px; border-radius: 50%; background: rgba(255,255,255,0.45);
   }
+  #prompt {
+    position: absolute; top: 55%; left: 50%; transform: translateX(-50%);
+    color: #e0b53a; font-size: 13px; letter-spacing: 0.15em; font-weight: 900;
+    text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity 0.2s; white-space: nowrap;
+  }
 
   #vignette {
     position: fixed; inset: 0; pointer-events: none; z-index: 12; opacity: 0;
@@ -152,6 +157,7 @@
   <div id="objective">Найди 6 предохранителей и открой дверь</div>
   <div id="fuses">🔋 0 / 6</div>
   <div id="crosshair"></div>
+  <div id="prompt"></div>
   <div id="msg"></div>
   <div id="stamina-wrap">
     <div class="bar-label">ВЫНОСЛИВОСТЬ</div>
@@ -205,7 +211,7 @@
   <button class="btn" id="start-btn">ИГРАТЬ</button>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
-    Собери <b>6 предохранителей</b> и найди выход. Свет помогает видеть, но ОНО видит свет.
+    Собери <b>6 предохранителей</b> (подойди вплотную — заберутся сами) и найди выход.<br>Свет помогает видеть, но ОНО видит свет.
   </div>
 </div>
 
@@ -252,6 +258,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=4"></script>
+<script type="module" src="game.js?v=5"></script>
 </body>
 </html>

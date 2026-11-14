@@ -26,6 +26,7 @@ const hud = document.getElementById('hud');
 const objectiveEl = document.getElementById('objective');
 const fusesEl = document.getElementById('fuses');
 const msgEl = document.getElementById('msg');
+const promptEl = document.getElementById('prompt');
 const batteryFill = document.getElementById('battery-fill');
 const staminaFill = document.getElementById('stamina-fill');
 const vignette = document.getElementById('vignette');
@@ -405,7 +406,7 @@ function placeItems() {
     const [i, j] = chosen[k];
     mesh.position.copy(tileCenter(i, j)).setY(0.9);
     worldGroup.add(mesh);
-    items.push({ type: 'fuse', mesh, taken: false });
+    items.push({ type: 'fuse', mesh, taken: false, baseY: 0.9, phase: rand(0, 6.28) });
   }
   for (let k = 0; k < 4; k++) {
     const mesh = makeBattery();
@@ -413,7 +414,7 @@ function placeItems() {
     mesh.position.copy(tileCenter(i, j)).setY(0.75);
     mesh.rotation.z = Math.PI / 2;
     worldGroup.add(mesh);
-    items.push({ type: 'battery', mesh, taken: false });
+    items.push({ type: 'battery', mesh, taken: false, baseY: 0.75, phase: rand(0, 6.28) });
   }
 }
 
@@ -795,10 +796,19 @@ function toggleFlashlight() {
 
 // ---------- Items / exit ----------
 function updateItems() {
+  let nearItem = null, nearDist = 9;
   for (const it of items) {
     if (it.taken) continue;
     it.mesh.rotation.y += 0.02;
-    if (it.mesh.position.distanceTo(camera.position) < 1.35) {
+    it.mesh.position.y = it.baseY + Math.sin(S.time * 2.2 + it.phase) * 0.09;
+    const dx = it.mesh.position.x - player.pos.x;
+    const dz = it.mesh.position.z - player.pos.z;
+    const d2 = dx * dx + dz * dz;
+    if (d2 < 3.5 * 3.5 && d2 < nearDist) {
+      nearDist = d2;
+      nearItem = it;
+    }
+    if (d2 < 1.7 * 1.7) {
       it.taken = true;
       it.mesh.visible = false;
       playPickup();
@@ -822,6 +832,13 @@ function updateItems() {
         showMsg('Батарейка +55%');
       }
     }
+  }
+
+  if (nearItem && !S.won) {
+    promptEl.textContent = nearItem.type === 'fuse' ? '🔋 ПРЕДОХРАНИТЕЛЬ — ПОДОЙДИ БЛИЖЕ' : '🔋 БАТАРЕЙКА — ПОДОЙДИ БЛИЖЕ';
+    promptEl.style.opacity = nearDist < 1.7 * 1.7 ? 0 : 1;
+  } else {
+    promptEl.style.opacity = 0;
   }
 
   const dc = doorGroup.position;
