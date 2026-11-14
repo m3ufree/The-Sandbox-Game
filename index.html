@@ -21,12 +21,17 @@
 
   h1.title {
     font-family: 'Arial Black', Arial, sans-serif;
-    font-size: clamp(34px, 7vw, 88px); letter-spacing: 0.06em; color: #e8e4dc;
-    text-shadow: 0 0 4px #000, 4px 4px 0 #7a5a00, 0 0 40px rgba(216,150,40,0.45);
+    font-size: clamp(34px, 7vw, 88px); letter-spacing: 0.06em;
+    background: linear-gradient(180deg, #ffe9a8 0%, #ffc23d 55%, #a86e10 100%);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    filter: drop-shadow(4px 4px 0 #3a2a00) drop-shadow(0 0 34px rgba(216,150,40,0.5));
     margin-bottom: 6px; font-weight: 900; text-transform: uppercase;
     transform: skewX(-4deg);
   }
-  .subtitle { color: #8a847a; letter-spacing: 0.4em; font-size: 12px; margin-bottom: 26px; font-weight: 700; }
+  .subtitle {
+    color: #8a847a; letter-spacing: 0.4em; font-size: 12px; margin-bottom: 8px; font-weight: 700;
+  }
+  .verline { color: #5c564d; letter-spacing: 0.25em; font-size: 10px; margin-bottom: 24px; font-weight: 700; font-family: 'Courier New', monospace; }
 
   .btn {
     background: #141414; border: 2px solid #2c2c2c; border-left: 6px solid #d89628;
@@ -37,6 +42,7 @@
 
   .save-row { display: flex; gap: 10px; margin-top: 22px; }
   .btn.small { padding: 10px 18px; font-size: 14px; letter-spacing: 0.08em; border-left-width: 4px; }
+  .btn:hover { border-color: #d89628; background: #1c1508; color: #ffcf5a; }
 
   .help { margin-top: 24px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
   .help b { color: #c9c2b8; }
@@ -47,6 +53,7 @@
     width: 150px; padding: 14px 10px 12px; cursor: pointer;
     background: #121212; border: 2px solid #2c2c2c; transition: all 0.15s;
   }
+  .map-card:hover { transform: translateY(-4px); border-color: #7a5a1a; background: #171310; }
   .map-card:hover { border-color: #6a551a; }
   .map-card.selected { border-color: #d89628; background: #1c1508; box-shadow: 0 0 22px rgba(216,150,40,0.4); }
   .map-icon { font-size: 38px; margin-bottom: 8px; }
@@ -168,6 +175,7 @@
 <div id="menu-overlay" class="overlay">
   <h1 class="title">THE SANDBOX GAME</h1>
   <div class="subtitle">ПОСТРОЙ СВОЙ МИР</div>
+  <div class="verline">ВЕРСИЯ 1.1.0</div>
   <div class="map-row">
     <div class="map-card selected" data-map="yard">
       <div class="map-icon">🏚️</div>
@@ -216,6 +224,7 @@
   </div>
   <div class="save-row">
     <button class="btn small" id="bag-btn">🎒 Рюкзак</button>
+    <button class="btn small" id="exit-btn">🚪 Выйти из карты</button>
   </div>
   <input type="file" id="xml-file" accept=".xml,text/xml" hidden>
 </div>
@@ -274,6 +283,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=31"></script>
+<script type="module" src="game.js?v=32"></script>
 </body>
 </html>

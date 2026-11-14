@@ -3125,6 +3125,26 @@ document.getElementById('bag-close').addEventListener('click', (e) => {
 
 bagOverlay.addEventListener('click', (e) => e.stopPropagation());
 
+function exitToMenu() {
+  if (S.bagOpen) closeBag();
+  stopTvScreen();
+  if (S.driving) exitCar();
+  S.sitting = null;
+  saveLocal(true);
+  S.playing = false;
+  S.started = false;
+  pauseOverlay.classList.add('hidden');
+  hud.classList.add('hidden');
+  menuOverlay.classList.remove('hidden');
+  if (document.pointerLockElement === canvas) document.exitPointerLock();
+  if (document.fullscreenElement) document.exitFullscreen().catch(() => {});
+}
+
+document.getElementById('exit-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  exitToMenu();
+});
+
 pauseOverlay.addEventListener('click', () => {
   if (IS_TOUCH) {
     S.playing = true;
