@@ -74,6 +74,11 @@
     border-left: 4px solid #d89628; opacity: 0; transition: opacity 0.4s; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
 
+  #flash {
+    position: fixed; inset: 0; background: #fff; opacity: 0;
+    pointer-events: none; z-index: 30;
+  }
+
   #prompt {
     position: absolute; bottom: 170px; left: 50%; transform: translateX(-50%);
     color: #ffd98a; font-size: 14px; letter-spacing: 0.1em; font-weight: 900;
@@ -177,7 +182,8 @@
   <button class="btn" id="start-btn">ИГРАТЬ</button>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
-    <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-8 / колесо</b> — выбор · <b>T</b> — день/ночь
+    <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-8 / колесо</b> — выбор · <b>T</b> — день/ночь<br>
+    <b>🚨 ПОЛИЦИЯ СЛЕДИТ ЗА ПОРЯДКОМ</b> · за взрывы и наезды — задержание · насмелишься дальше — <b>⚡ божья кара</b> (не убиваемая!)
   </div>
 </div>
 
@@ -210,6 +216,8 @@
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
+<div id="flash"></div>
+
 <div id="boot-error" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:99; background:#3a2a00; color:#ffe0b0; border:1px solid #d89628; padding:10px 14px; font:13px 'Courier New',monospace; border-radius:6px;"></div>
 <script>
 (function () {
@@ -223,6 +231,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=14"></script>
+<script type="module" src="game.js?v=15"></script>
 </body>
 </html>

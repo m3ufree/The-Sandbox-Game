@@ -33,6 +33,7 @@ const joyBase = document.getElementById('joy-base');
 const joyKnob = document.getElementById('joy-knob');
 const promptEl = document.getElementById('prompt');
 const btnCar = document.getElementById('btn-car');
+const flashEl = document.getElementById('flash');
 
 // ---------- Game state ----------
 const S = {
@@ -642,6 +643,10 @@ function buildWorld(map) {
   player.yaw = Math.PI * 0.75;
   player.pitch = 0;
   builtMap = map;
+
+  for (const n of [...npcs]) removeNPC(n);
+  crimes = 0;
+  for (let k = 0; k < 8; k++) spawnCiv();
 }
 
 // ---------- Player ----------
@@ -652,7 +657,19 @@ const player = {
   vy: 0, onGround: true,
 };
 
-const carState = { heading: 0, prevFwd: 0 };
+const carState = { heading: 0, prevFwd: 0, fwd: 0 };
+
+// ---------- NPCs ----------
+let npcs = [];
+let crimes = 0, crimeTimer = 0, copSpawnT = 0, arrestCd = 0, smiteCd = 0, sirenT = 0, panicT = 0;
+const panicPos = new THREE.Vector3();
+
+function lerpAngle(a, b, t) {
+  let d = (b - a) % (Math.PI * 2);
+  if (d > Math.PI) d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return a + d * t;
+}
 let engineOsc = null, engineGain = null;
 
 // ---------- Touch controls ----------
@@ -1212,6 +1229,13 @@ function explode(obj) {
   removeObject(obj);
   playBoom();
   S.shakeT = 0.6;
+  commitCrime();
+  panicPos.copy(p);
+  panicT = 3;
+  for (const n of [...npcs]) {
+    if (n.type === 'god' || n.downT > 0) continue;
+    if (Math.hypot(n.mesh.position.x - p.x, n.mesh.position.z - p.z) < 5) knockNPC(n, 4);
+  }
   const flash = new THREE.PointLight(0xffa040, 80, 28, 1.5);
   flash.position.copy(p).setY(1.5);
   worldGroup.add(flash);
@@ -1369,8 +1393,22 @@ function updateCar(dt) {
   }
 
   obj.mesh.rotation.y = carState.heading;
+  carState.fwd = fwdSpeed;
   updateSoftBody(obj, dt);
   player.pos.set(obj.mesh.position.x, EYE_HEIGHT, obj.mesh.position.z);
+
+  if (Math.abs(fwdSpeed) > 3) {
+    for (const n of [...npcs]) {
+      if (n.type === 'god' || n.downT > 0) continue;
+      const d = Math.hypot(n.mesh.position.x - obj.mesh.position.x, n.mesh.position.z - obj.mesh.position.z);
+      if (d < 1.8) {
+        knockNPC(n, n.type === 'cop' ? 3 : 4);
+        commitCrime();
+        playEek();
+        S.shakeT = Math.max(S.shakeT, 0.2);
+      }
+    }
+  }
   if (engineOsc && engineGain) {
     const sp = Math.abs(fwdSpeed);
     engineOsc.frequency.value = 55 + sp * 9;
@@ -1609,6 +1647,312 @@ function softDeform(o) {
   }
 }
 
+// ---------- NPC models ----------
+function buildHumanoid(opts) {
+  const g = new THREE.Group();
+  const shirtMat = new THREE.MeshStandardMaterial({ color: opts.shirt, roughness: 0.9 });
+  const pantsMat = new THREE.MeshStandardMaterial({ color: opts.pants, roughness: 0.9 });
+  const skinMat = new THREE.MeshStandardMaterial({ color: 0xd8a878, roughness: 0.8 });
+  const legGeo = new THREE.BoxGeometry(0.16, 0.5, 0.16);
+  legGeo.translate(0, -0.25, 0);
+  const legL = new THREE.Mesh(legGeo, pantsMat);
+  legL.position.set(-0.11, 0.5, 0);
+  const legR = new THREE.Mesh(legGeo, pantsMat);
+  legR.position.set(0.11, 0.5, 0);
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.55, 0.24), shirtMat);
+  torso.position.y = 0.78;
+  const armGeo = new THREE.BoxGeometry(0.12, 0.46, 0.12);
+  armGeo.translate(0, -0.2, 0);
+  const armL = new THREE.Mesh(armGeo, shirtMat);
+  armL.position.set(-0.28, 1.0, 0);
+  const armR = new THREE.Mesh(armGeo, shirtMat);
+  armR.position.set(0.28, 1.0, 0);
+  const head = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.26, 0.24), skinMat);
+  head.position.y = 1.2;
+  g.add(legL, legR, torso, armL, armR, head);
+  if (opts.cap) {
+    const capMat = new THREE.MeshStandardMaterial({ color: opts.cap, roughness: 0.9 });
+    const cap = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.09, 0.32), capMat);
+    cap.position.set(0, 1.37, 0.02);
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.03, 0.14), capMat);
+    visor.position.set(0, 1.33, 0.2);
+    g.add(cap, visor);
+  }
+  g.userData.limbs = { legL, legR, armL, armR };
+  return g;
+}
+
+function buildGod() {
+  const g = new THREE.Group();
+  const robeMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e0, emissive: 0xffe9a0, emissiveIntensity: 0.45, roughness: 0.6 });
+  const goldMat = new THREE.MeshStandardMaterial({ color: 0xffd34d, emissive: 0xffc830, emissiveIntensity: 0.8, roughness: 0.3, metalness: 0.6 });
+  const robe = new THREE.Mesh(new THREE.ConeGeometry(0.42, 1.5, 10), robeMat);
+  robe.position.y = 0.75;
+  const torso = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.5, 0.26), robeMat);
+  torso.position.y = 1.7;
+  const head = new THREE.Mesh(
+    new THREE.BoxGeometry(0.26, 0.28, 0.24),
+    new THREE.MeshStandardMaterial({ color: 0xffe0b0, emissive: 0xffd890, emissiveIntensity: 0.5 })
+  );
+  head.position.y = 2.1;
+  const halo = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.035, 8, 20), goldMat);
+  halo.position.y = 2.42;
+  halo.rotation.x = Math.PI / 2;
+  const wingGeo = new THREE.BoxGeometry(0.06, 0.9, 0.3);
+  const wingL = new THREE.Mesh(wingGeo, robeMat);
+  wingL.position.set(-0.3, 1.75, -0.12);
+  const wingR = new THREE.Mesh(wingGeo, robeMat);
+  wingR.position.set(0.3, 1.75, -0.12);
+  const light = new THREE.PointLight(0xffe0a0, 14, 16, 1.6);
+  light.position.y = 1.8;
+  g.add(robe, torso, head, halo, wingL, wingR, light);
+  g.userData.limbs = { halo, wingL, wingR };
+  return g;
+}
+
+function removeNPC(n) {
+  const i = npcs.indexOf(n);
+  if (i === -1) return;
+  npcs.splice(i, 1);
+  scene.remove(n.mesh);
+  n.mesh.traverse(o => {
+    if (o.geometry) o.geometry.dispose();
+    if (o.material) o.material.dispose();
+  });
+}
+
+function randomSpawnPoint(minDist) {
+  for (let tries = 0; tries < 40; tries++) {
+    const t = floors[randInt(floors.length)];
+    const c = tileCenter(t[0], t[1]);
+    if (Math.hypot(c.x - player.pos.x, c.z - player.pos.z) > minDist) return c;
+  }
+  return null;
+}
+
+function spawnCiv() {
+  const c = randomSpawnPoint(7);
+  if (!c) return;
+  const mesh = buildHumanoid({
+    shirt: [0x8a3a3a, 0x3a6a8a, 0x6a8a3a, 0x8a7a3a, 0x7a4a8a][randInt(5)],
+    pants: [0x2c2c34, 0x3a3a2c, 0x25303a][randInt(3)],
+  });
+  mesh.position.set(c.x, 0, c.z);
+  mesh.rotation.y = rand(0, Math.PI * 2);
+  scene.add(mesh);
+  npcs.push({ mesh, type: 'civ', state: 'wander', dir: mesh.rotation.y, t: rand(1, 4), animT: rand(0, 6), downT: 0 });
+}
+
+function spawnCop() {
+  const c = randomSpawnPoint(9);
+  if (!c) return;
+  const mesh = buildHumanoid({ shirt: 0x1c2c5a, pants: 0x14203c, cap: 0x101830 });
+  mesh.position.set(c.x, 0, c.z);
+  scene.add(mesh);
+  npcs.push({ mesh, type: 'cop', dir: 0, t: 0, animT: 0, downT: 0 });
+  showMsg('🚨 Полиция выехала на вызов!');
+}
+
+function spawnGod() {
+  const c = randomSpawnPoint(10);
+  if (!c) return;
+  const mesh = buildGod();
+  mesh.position.set(c.x, 0.35, c.z);
+  scene.add(mesh);
+  npcs.push({ mesh, type: 'god' });
+  playThunder();
+  showMsg('⚡ БОЖЬЯ КАРА СПУСТИЛАСЬ С НЕБЕС');
+}
+
+// ---------- NPC AI ----------
+function npcWalk(n, dt, speed) {
+  const step = speed * dt;
+  const nx = n.mesh.position.x + Math.sin(n.dir) * step;
+  const nz = n.mesh.position.z + Math.cos(n.dir) * step;
+  if (!collides(nx, nz)) {
+    n.mesh.position.x = nx;
+    n.mesh.position.z = nz;
+  } else {
+    n.dir += rand(1.2, 2.2) * (Math.random() < 0.5 ? 1 : -1);
+  }
+  n.animT += dt * (4 + speed * 1.6);
+  const sw = Math.sin(n.animT) * 0.65;
+  const l = n.mesh.userData.limbs;
+  l.legL.rotation.x = sw;
+  l.legR.rotation.x = -sw;
+  l.armL.rotation.x = -sw * 0.8;
+  l.armR.rotation.x = sw * 0.8;
+  n.mesh.rotation.y = n.dir;
+}
+
+function knockNPC(n, dur) {
+  n.downT = dur;
+  n.mesh.rotation.x = -Math.PI / 2;
+  n.mesh.position.y = 0.3;
+}
+
+function reviveNPC(n) {
+  n.downT = 0;
+  n.mesh.rotation.x = 0;
+  n.mesh.position.y = 0;
+}
+
+function fleeFrom(n, x, z) {
+  n.state = 'flee';
+  n.t = 4;
+  n.dir = Math.atan2(n.mesh.position.x - x, n.mesh.position.z - z);
+  playEek();
+}
+
+function updateCiv(n, dt) {
+  if (n.downT > 0) {
+    n.downT -= dt;
+    if (n.downT <= 0) reviveNPC(n);
+    return;
+  }
+  n.t -= dt;
+  if (n.state === 'flee') {
+    npcWalk(n, dt, 5.0);
+    if (n.t <= 0) { n.state = 'wander'; n.t = rand(2, 5); }
+    return;
+  }
+  if (panicT > 0 && Math.hypot(n.mesh.position.x - panicPos.x, n.mesh.position.z - panicPos.z) < 14) {
+    fleeFrom(n, panicPos.x, panicPos.z);
+    return;
+  }
+  if (S.driving && Math.abs(carState.fwd) > 4) {
+    const d = Math.hypot(n.mesh.position.x - S.driving.mesh.position.x, n.mesh.position.z - S.driving.mesh.position.z);
+    if (d < 5) { fleeFrom(n, S.driving.mesh.position.x, S.driving.mesh.position.z); return; }
+  }
+  if (n.t <= 0) { n.dir = rand(0, Math.PI * 2); n.t = rand(2, 5); }
+  npcWalk(n, dt, 1.5);
+}
+
+function arrest() {
+  arrestCd = 6;
+  if (S.driving) exitCar();
+  player.pos.copy(tileCenter(spawnTile[0], spawnTile[1]));
+  player.pos.y = EYE_HEIGHT;
+  player.vy = 0;
+  player.onGround = true;
+  showMsg('🚨 ТЕБЯ ЗАДЕРЖАЛИ!');
+  playWhistle();
+  crimes = 0;
+  for (const n of [...npcs]) if (n.type === 'cop') removeNPC(n);
+}
+
+function updateCop(n, dt) {
+  if (n.downT > 0) {
+    n.downT -= dt;
+    if (n.downT <= 0) reviveNPC(n);
+    return;
+  }
+  const dx = player.pos.x - n.mesh.position.x;
+  const dz = player.pos.z - n.mesh.position.z;
+  const d = Math.hypot(dx, dz);
+  n.dir = lerpAngle(n.dir, Math.atan2(dx, dz), Math.min(1, 6 * dt));
+  const step = 5.6 * dt;
+  for (const off of [0, 0.8, -0.8, 1.6, -1.6, 2.4, -2.4]) {
+    const a = n.dir + off;
+    const nx = n.mesh.position.x + Math.sin(a) * step;
+    const nz = n.mesh.position.z + Math.cos(a) * step;
+    if (!collides(nx, nz)) {
+      n.mesh.position.x = nx;
+      n.mesh.position.z = nz;
+      n.mesh.rotation.y = a;
+      break;
+    }
+  }
+  n.animT += dt * 10;
+  const sw = Math.sin(n.animT) * 0.7;
+  const l = n.mesh.userData.limbs;
+  l.legL.rotation.x = sw;
+  l.legR.rotation.x = -sw;
+  l.armL.rotation.x = -sw * 0.9;
+  l.armR.rotation.x = sw * 0.9;
+  if (d < 1.5 && arrestCd <= 0 && (!S.driving || Math.abs(carState.fwd) < 2.5)) arrest();
+}
+
+function smite(n) {
+  smiteCd = 8;
+  if (S.driving) exitCar();
+  playThunder();
+  flashScreen();
+  S.shakeT = 0.8;
+  player.vy = 15;
+  player.onGround = false;
+  for (const o of objects) {
+    const d = Math.hypot(o.mesh.position.x - player.pos.x, o.mesh.position.z - player.pos.z);
+    if (d < 6) {
+      o.vel.y += 9;
+      o.vel.x += rand(-4, 4);
+      o.vel.z += rand(-4, 4);
+    }
+  }
+  showMsg('⚡ БОЖЬЯ КАРА! НЕ ГРЕШИ!');
+  removeNPC(n);
+  crimes = 0;
+}
+
+function updateGod(n, dt) {
+  const dx = player.pos.x - n.mesh.position.x;
+  const dz = player.pos.z - n.mesh.position.z;
+  const d = Math.hypot(dx, dz);
+  if (d > 0.01) {
+    n.mesh.position.x += dx / d * 3.4 * dt;
+    n.mesh.position.z += dz / d * 3.4 * dt;
+  }
+  n.mesh.position.y = 0.35 + Math.sin(performance.now() * 0.002) * 0.15;
+  n.mesh.rotation.y = Math.atan2(dx, dz);
+  const now = performance.now();
+  const l = n.mesh.userData.limbs;
+  l.halo.rotation.z += dt * 2;
+  l.wingL.rotation.z = 0.5 + Math.sin(now * 0.006) * 0.25;
+  l.wingR.rotation.z = -0.5 - Math.sin(now * 0.006) * 0.25;
+  if (d < 1.7 && smiteCd <= 0) smite(n);
+}
+
+function updateNPCs(dt) {
+  arrestCd = Math.max(0, arrestCd - dt);
+  smiteCd = Math.max(0, smiteCd - dt);
+  if (panicT > 0) panicT -= dt;
+  if (sirenT > 0) sirenT -= dt;
+
+  if (crimes > 0) {
+    crimeTimer -= dt;
+    if (crimeTimer <= 0) { crimes--; crimeTimer = 30; }
+  }
+  const copCount = npcs.filter(n => n.type === 'cop').length;
+  if (crimes <= 0 && copCount > 0) {
+    for (const n of [...npcs]) if (n.type === 'cop') removeNPC(n);
+  } else if (crimes > 0 && copCount < 2) {
+    copSpawnT -= dt;
+    if (copSpawnT <= 0) { spawnCop(); copSpawnT = 3; }
+  }
+  if (crimes >= 4 && !npcs.some(n => n.type === 'god') && smiteCd <= 0) spawnGod();
+
+  for (const n of [...npcs]) {
+    if (n.type === 'god') updateGod(n, dt);
+    else if (n.type === 'cop') updateCop(n, dt);
+    else updateCiv(n, dt);
+  }
+  if (copCount > 0 && sirenT <= 0) { playSiren(); sirenT = 1.6; }
+}
+
+function commitCrime() {
+  crimes = Math.min(6, crimes + 1);
+  crimeTimer = 30;
+}
+
+function flashScreen() {
+  flashEl.style.transition = 'none';
+  flashEl.style.opacity = 0.9;
+  requestAnimationFrame(() => {
+    flashEl.style.transition = 'opacity 0.6s';
+    flashEl.style.opacity = 0;
+  });
+}
+
 // ---------- HUD ----------
 let msgTimer = 0;
 function showMsg(text) {
@@ -1691,6 +2035,76 @@ function playPoof() {
   g.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
   src.connect(f); f.connect(g); g.connect(master);
   src.start(t); src.stop(t + 0.14);
+}
+
+function playEek() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(rand(800, 1000), t);
+  o.frequency.exponentialRampToValueAtTime(1500, t + 0.12);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.05, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + 0.16);
+}
+
+function playSiren() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator();
+  o.type = 'triangle';
+  o.frequency.setValueAtTime(660, t);
+  o.frequency.linearRampToValueAtTime(880, t + 0.3);
+  o.frequency.linearRampToValueAtTime(660, t + 0.6);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.045, t);
+  g.gain.setValueAtTime(0.045, t + 0.5);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.62);
+  o.connect(g); g.connect(master);
+  o.start(t); o.stop(t + 0.65);
+}
+
+function playWhistle() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  for (const off of [0, 0.18]) {
+    const o = AC.createOscillator();
+    o.type = 'square';
+    o.frequency.value = 1250;
+    const g = AC.createGain();
+    g.gain.setValueAtTime(0.06, t + off);
+    g.gain.exponentialRampToValueAtTime(0.001, t + off + 0.14);
+    o.connect(g); g.connect(master);
+    o.start(t + off); o.stop(t + off + 0.15);
+  }
+}
+
+function playThunder() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const src = AC.createBufferSource();
+  src.buffer = noiseBuf;
+  const f = AC.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(500, t);
+  f.frequency.exponentialRampToValueAtTime(50, t + 1.1);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.55, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 1.3);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 1.35);
+  const o = AC.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(55, t);
+  o.frequency.exponentialRampToValueAtTime(24, t + 1.0);
+  const g2 = AC.createGain();
+  g2.gain.setValueAtTime(0.4, t);
+  g2.gain.exponentialRampToValueAtTime(0.001, t + 1.2);
+  o.connect(g2); g2.connect(master);
+  o.start(t); o.stop(t + 1.25);
 }
 
 function playBoom() {
@@ -1822,6 +2236,7 @@ function loop(now) {
         btnCar.classList.toggle('nearest', !!near || !!S.driving);
       }
       updatePhysics(dt);
+      updateNPCs(dt);
       updateFX(dt);
     } else {
       camera.position.set(player.pos.x, player.pos.y, player.pos.z);
