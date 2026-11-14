@@ -2457,7 +2457,7 @@ const btnTvLink = document.getElementById('btn-tv-link');
 const cssWrap = document.createElement('div');
 cssWrap.style.cssText = 'position:fixed;left:0;top:0;overflow:hidden;pointer-events:none;z-index:5;display:none;';
 const cssInner = document.createElement('div');
-cssInner.style.cssText = 'transform-style:preserve-3d;transform-origin:0 0;';
+cssInner.style.cssText = 'transform-style:preserve-3d;width:100%;height:100%;';
 cssWrap.appendChild(cssInner);
 const tvIframe = document.createElement('iframe');
 tvIframe.style.cssText = 'position:absolute;border:0;pointer-events:auto;left:0;top:0;';
@@ -2467,6 +2467,7 @@ cssInner.appendChild(tvIframe);
 document.body.appendChild(cssWrap);
 
 const _cssM = new THREE.Matrix4();
+const _cssS = new THREE.Matrix4().makeScale(0.01, 0.01, 0.01);
 const _tvV1 = new THREE.Vector3();
 const _tvV2 = new THREE.Vector3();
 const _tvV3 = new THREE.Vector3();
@@ -2586,7 +2587,8 @@ function updateTvCss() {
   cssInner.style.width = w + 'px';
   cssInner.style.height = h + 'px';
   cssInner.style.transform = 'perspective(' + focal + 'px) ' + cssCameraMatrix(camera.matrixWorldInverse) + 'translate(' + (w / 2) + 'px,' + (h / 2) + 'px)';
-  tvIframe.style.transform = cssObjectMatrix(scr.matrixWorld);
+  _cssM.copy(scr.matrixWorld).multiply(_cssS);
+  tvIframe.style.transform = cssObjectMatrix(_cssM);
 }
 
 btnTvWatch.addEventListener('touchstart', (e) => {
