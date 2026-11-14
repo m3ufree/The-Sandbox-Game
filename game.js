@@ -45,7 +45,13 @@ const S = {
 };
 
 // ---------- Renderer / scene ----------
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+} catch (e) {
+  if (window.__showBootError) window.__showBootError('Не удалось запустить графику (WebGL). Включи аппаратное ускорение в настройках браузера и перезапусти его, либо обнови браузер.');
+  throw e;
+}
 renderer.setPixelRatio(IS_TOUCH ? Math.min(window.devicePixelRatio, 1.5) : Math.min(window.devicePixelRatio, 2));
 if (IS_TOUCH) document.body.classList.add('touch');
 renderer.setSize(window.innerWidth, window.innerHeight);

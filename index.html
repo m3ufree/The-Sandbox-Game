@@ -227,15 +227,26 @@
 <script>
 (function () {
   var el = document.getElementById('boot-error');
-  function show(text) { el.style.display = 'block'; el.textContent = text; }
+  function show(text) { window.__friendlyShown = true; el.style.display = 'block'; el.textContent = text; }
+  window.__showBootError = show;
   window.addEventListener('error', function (e) {
+    if (window.__friendlyShown) return;
     show('Ошибка: ' + (e.message || e.type));
   });
-  setTimeout(function () {
-    if (!window.__gameBooted) show('Не удалось загрузить игру. Проверь интернет и обнови страницу.');
-  }, 6000);
+  var ok = false;
+  try {
+    var c = document.createElement('canvas');
+    ok = !!(c.getContext('webgl2') || c.getContext('webgl') || c.getContext('experimental-webgl'));
+  } catch (err) { ok = false; }
+  if (!ok) {
+    show('WebGL недоступен — игра не может запуститься. Включи аппаратное ускорение: Chrome — Настройки → Система → «Использовать аппаратное ускорение», потом перезапусти браузер. На телефоне — обнови браузер или систему. Если браузер старый (IE, старый WebView) — открой игру в свежем Chrome.');
+  } else {
+    setTimeout(function () {
+      if (!window.__gameBooted && !window.__friendlyShown) show('Не удалось загрузить игру. Проверь интернет и обнови страницу.');
+    }, 6000);
+  }
 })();
 </script>
-<script type="module" src="game.js?v=17"></script>
+<script type="module" src="game.js?v=18"></script>
 </body>
 </html>
