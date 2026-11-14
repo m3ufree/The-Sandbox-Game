@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>THE MONSTER — 3D хоррор</title>
+<title>THE SANDBOX GAME</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { width: 100%; height: 100%; overflow: hidden; background: #000; font-family: 'Arial Black', 'Segoe UI', Arial, sans-serif; }
@@ -14,113 +14,83 @@
     align-items: center; justify-content: center; text-align: center;
     background:
       repeating-linear-gradient(0deg, rgba(255,255,255,0.015) 0 2px, transparent 2px 4px),
-      radial-gradient(ellipse at 50% 30%, #1a0505 0%, #0a0a0a 55%, #000 100%);
+      radial-gradient(ellipse at 50% 30%, #1a1205 0%, #0a0a0a 55%, #000 100%);
     color: #d6d2ca; z-index: 20; padding: 20px;
   }
   .hidden { display: none !important; }
 
   h1.title {
     font-family: 'Arial Black', Arial, sans-serif;
-    font-size: clamp(38px, 8vw, 96px); letter-spacing: 0.06em; color: #e8e4dc;
-    text-shadow: 0 0 4px #000, 4px 4px 0 #7a0000, 0 0 40px rgba(198,40,40,0.5);
+    font-size: clamp(34px, 7vw, 88px); letter-spacing: 0.06em; color: #e8e4dc;
+    text-shadow: 0 0 4px #000, 4px 4px 0 #7a5a00, 0 0 40px rgba(216,150,40,0.45);
     margin-bottom: 6px; font-weight: 900; text-transform: uppercase;
     transform: skewX(-4deg);
   }
   .subtitle { color: #8a847a; letter-spacing: 0.4em; font-size: 12px; margin-bottom: 26px; font-weight: 700; }
 
   .btn {
-    background: #141414; border: 2px solid #2c2c2c; border-left: 6px solid #c62828;
+    background: #141414; border: 2px solid #2c2c2c; border-left: 6px solid #d89628;
     color: #e8e4dc; font-family: inherit; font-size: 19px; letter-spacing: 0.18em;
     padding: 14px 52px; cursor: pointer; transition: all 0.15s; text-transform: uppercase; font-weight: 900;
   }
-  .btn:hover { background: #c62828; border-color: #c62828; color: #000; box-shadow: 0 0 26px rgba(198,40,40,0.55); }
+  .btn:hover { background: #d89628; border-color: #d89628; color: #000; box-shadow: 0 0 26px rgba(216,150,40,0.55); }
 
-  .help { margin-top: 26px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
+  .help { margin-top: 24px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
   .help b { color: #c9c2b8; }
 
   /* Map cards */
-  .map-row { display: flex; gap: 14px; margin-bottom: 28px; flex-wrap: wrap; justify-content: center; }
+  .map-row { display: flex; gap: 12px; margin-bottom: 26px; flex-wrap: wrap; justify-content: center; }
   .map-card {
-    width: 158px; padding: 16px 10px 13px; cursor: pointer;
+    width: 150px; padding: 14px 10px 12px; cursor: pointer;
     background: #121212; border: 2px solid #2c2c2c; transition: all 0.15s;
   }
-  .map-card:hover { border-color: #6a1a1a; }
-  .map-card.selected { border-color: #c62828; background: #1c0b0b; box-shadow: 0 0 22px rgba(198,40,40,0.4); }
-  .map-icon { font-size: 40px; margin-bottom: 8px; filter: grayscale(0.3) brightness(0.9); }
-  .map-name { font-size: 14px; letter-spacing: 0.1em; color: #e8e4dc; font-weight: 900; text-transform: uppercase; }
+  .map-card:hover { border-color: #6a551a; }
+  .map-card.selected { border-color: #d89628; background: #1c1508; box-shadow: 0 0 22px rgba(216,150,40,0.4); }
+  .map-icon { font-size: 38px; margin-bottom: 8px; }
+  .map-name { font-size: 13px; letter-spacing: 0.08em; color: #e8e4dc; font-weight: 900; text-transform: uppercase; }
   .map-desc { font-size: 10px; color: #7d776d; margin-top: 5px; font-family: 'Courier New', monospace; font-weight: 700; }
-  .map-card.selected .map-name { color: #ff5a4a; }
+  .map-card.selected .map-name { color: #ffcf5a; }
 
   /* HUD */
   #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; }
-  #objective {
+  #mapname {
     position: absolute; top: 14px; left: 50%; transform: translateX(-50%);
     color: #d6d2ca; font-size: 14px; letter-spacing: 0.1em; font-weight: 900; text-transform: uppercase;
     text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.45); padding: 6px 16px;
-    border-left: 4px solid #c62828; transition: opacity 0.5s; white-space: nowrap; max-width: 94vw; overflow: hidden;
+    border-left: 4px solid #d89628; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
-  #fuses {
+  #hint {
     position: absolute; top: 58px; left: 50%; transform: translateX(-50%);
-    color: #e0b53a; font-size: 13px; letter-spacing: 0.12em; font-weight: 900; text-shadow: 2px 2px 0 #000;
-  }
-  .bar-wrap { position: absolute; left: 20px; bottom: 22px; width: 180px; }
-  .bar-label { color: #b5afa5; font-size: 10px; letter-spacing: 0.22em; margin-bottom: 4px; font-weight: 900; text-shadow: 1px 1px 0 #000; }
-  .bar { height: 10px; background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.22); }
-  .bar > div { height: 100%; width: 100%; transition: width 0.15s linear; }
-  #battery-fill { background: #e0b53a; box-shadow: 0 0 8px rgba(224,181,58,0.7); }
-  #stamina-wrap { position: absolute; left: 20px; bottom: 72px; width: 180px; }
-  #stamina-fill { background: #c62828; box-shadow: 0 0 8px rgba(198,40,40,0.7); }
-
-  #crosshair {
-    position: absolute; top: 50%; left: 50%; width: 5px; height: 5px;
-    margin: -2.5px; border-radius: 50%; background: rgba(255,255,255,0.45);
-  }
-  #prompt {
-    position: absolute; top: 55%; left: 50%; transform: translateX(-50%);
-    color: #e0b53a; font-size: 13px; letter-spacing: 0.15em; font-weight: 900;
-    text-shadow: 2px 2px 0 #000; opacity: 0; transition: opacity 0.2s; white-space: nowrap;
-  }
-
-  #vignette {
-    position: fixed; inset: 0; pointer-events: none; z-index: 12; opacity: 0;
-    background: radial-gradient(ellipse at center, transparent 42%, rgba(90,0,0,0.85) 100%);
-  }
-  #damage-flash {
-    position: fixed; inset: 0; pointer-events: none; z-index: 13; opacity: 0; background: #7a0000;
+    color: #9a948a; font-size: 11px; letter-spacing: 0.08em; font-weight: 700; font-family: 'Courier New', monospace;
+    text-shadow: 1px 1px 0 #000; text-align: center;
   }
   #msg {
-    position: absolute; bottom: 120px; left: 50%; transform: translateX(-50%);
+    position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
     color: #e8e4dc; font-size: 15px; letter-spacing: 0.12em; font-weight: 900;
     text-shadow: 2px 2px 0 #000; background: rgba(0,0,0,0.5); padding: 7px 16px;
-    border-left: 4px solid #c62828; opacity: 0; transition: opacity 0.4s; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden;
+    border-left: 4px solid #d89628; opacity: 0; transition: opacity 0.4s; text-align: center; white-space: nowrap; max-width: 94vw; overflow: hidden;
   }
 
-  #jumpscare { position: fixed; inset: 0; z-index: 30; background: #000; display: none; align-items: center; justify-content: center; overflow: hidden; }
-  #jumpscare.on { display: flex; animation: scare-shake 0.07s linear infinite; }
-  #jumpscare svg { width: 82vmin; height: 82vmin; animation: scare-zoom 0.8s cubic-bezier(0.2, 1.6, 0.4, 1) forwards; }
-  #jumpscare .goose-face { display: none; }
-  #jumpscare.goose .monster-face { display: none; }
-  #jumpscare.goose .goose-face { display: block; }
-  @keyframes scare-zoom {
-    0% { transform: scale(0.2); opacity: 0.4; }
-    55% { transform: scale(1.25); opacity: 1; }
-    100% { transform: scale(1.45); }
+  #hotbar {
+    position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 6px;
   }
-  @keyframes scare-shake {
-    0% { transform: translate(0, 0); } 25% { transform: translate(-9px, 7px); }
-    50% { transform: translate(8px, -6px); } 75% { transform: translate(-6px, -9px); }
-    100% { transform: translate(7px, 5px); }
+  .slot {
+    width: 54px; height: 54px; background: rgba(0,0,0,0.55); border: 2px solid #2c2c2c;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    color: #b5afa5; font-size: 22px; pointer-events: auto; cursor: pointer; touch-action: none;
   }
+  .slot span { font-size: 8px; letter-spacing: 0.04em; margin-top: 2px; font-weight: 900; font-family: Arial, sans-serif; }
+  .slot.sel { border-color: #d89628; background: rgba(216,150,40,0.25); color: #fff; }
 
-  #death-overlay h1, #win-overlay h1 {
-    font-size: clamp(32px, 6.5vw, 72px); letter-spacing: 0.08em; text-transform: uppercase; transform: skewX(-4deg);
+  #crosshair {
+    position: absolute; top: 50%; left: 50%; width: 6px; height: 6px;
+    margin: -3px; border-radius: 50%; background: rgba(255,255,255,0.6);
+    box-shadow: 0 0 4px rgba(0,0,0,0.8);
   }
-  #death-overlay h1 { color: #ff3b2a; text-shadow: 4px 4px 0 #4d0000, 0 0 40px rgba(255,59,42,0.5); }
-  #win-overlay h1 { color: #6fd66f; text-shadow: 4px 4px 0 #0c3a0c, 0 0 40px rgba(111,214,111,0.4); }
-  #death-overlay p, #win-overlay p { margin-top: 14px; color: #8a847a; font-size: 14px; font-family: 'Courier New', monospace; font-weight: 700; }
 
   #pause-overlay { background: rgba(0,0,0,0.85); cursor: pointer; }
-  #pause-overlay h2 { color: #e8e4dc; letter-spacing: 0.3em; font-size: 26px; text-transform: uppercase; border-left: 6px solid #c62828; padding-left: 16px; }
+  #pause-overlay h2 { color: #e8e4dc; letter-spacing: 0.3em; font-size: 26px; text-transform: uppercase; border-left: 6px solid #d89628; padding-left: 16px; }
   #pause-overlay p { margin-top: 16px; color: #8a847a; font-size: 13px; font-family: 'Courier New', monospace; font-weight: 700; }
 
   /* Touch controls */
@@ -144,9 +114,10 @@
     display: flex; align-items: center; justify-content: center;
     touch-action: none;
   }
-  .tbtn.active { background: rgba(198,40,40,0.55); border-color: #c62828; }
-  #btn-flash { right: 128px; bottom: 160px; }
-  #btn-sprint { right: 38px; bottom: 140px; }
+  .tbtn.active { background: rgba(216,150,40,0.55); border-color: #d89628; }
+  #btn-spawn { right: 38px; bottom: 140px; width: 76px; height: 76px; font-size: 32px; }
+  #btn-del { right: 130px; bottom: 160px; }
+  #btn-day { right: 216px; bottom: 140px; }
   #btn-pause { top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px; }
   #rotate-overlay { z-index: 40; background: #000; }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
@@ -157,99 +128,48 @@
 <canvas id="game-canvas"></canvas>
 
 <div id="hud" class="hidden">
-  <div id="objective">Найди 6 предохранителей и открой дверь</div>
-  <div id="fuses">🔋 0 / 6</div>
+  <div id="mapname">ДВОР</div>
+  <div id="hint">ЛКМ — поставить · ПКМ/X — удалить · 1-8 — выбор · T — день/ночь</div>
   <div id="crosshair"></div>
-  <div id="prompt"></div>
   <div id="msg"></div>
-  <div id="stamina-wrap">
-    <div class="bar-label">ВЫНОСЛИВОСТЬ</div>
-    <div class="bar"><div id="stamina-fill"></div></div>
-  </div>
-  <div class="bar-wrap">
-    <div class="bar-label">БАТАРЕЯ [F]</div>
-    <div class="bar"><div id="battery-fill"></div></div>
-  </div>
-</div>
-
-<div id="vignette"></div>
-<div id="damage-flash"></div>
-
-<div id="jumpscare">
-  <svg class="monster-face" viewBox="0 0 220 240">
-    <ellipse cx="110" cy="120" rx="78" ry="100" fill="#b8b0a4"/>
-    <ellipse cx="110" cy="52" rx="60" ry="26" fill="#8f887c"/>
-    <ellipse cx="78" cy="95" rx="24" ry="30" fill="#050505"/>
-    <ellipse cx="142" cy="95" rx="24" ry="30" fill="#050505"/>
-    <circle cx="80" cy="102" r="6" fill="#ff2020"/>
-    <circle cx="140" cy="102" r="6" fill="#ff2020"/>
-    <path d="M70 158 Q110 216 150 158 Q110 184 70 158 Z" fill="#1c0303"/>
-    <path d="M80 162 l6 15 6-13 6 15 6-14 6 15 6-14 6 15 6-14 6 15 6-13 6 14 5-14" stroke="#d8d2c8" stroke-width="3.5" fill="none" stroke-linejoin="round"/>
-    <path d="M36 66 Q58 30 92 42" stroke="#6b645c" stroke-width="2" fill="none"/>
-    <path d="M184 66 Q162 30 128 42" stroke="#6b645c" stroke-width="2" fill="none"/>
-    <path d="M96 190 Q104 200 100 212 M118 192 Q114 204 122 214" stroke="#5a544c" stroke-width="2" fill="none"/>
-  </svg>
-  <svg class="goose-face" viewBox="0 0 220 240">
-    <ellipse cx="110" cy="105" rx="72" ry="82" fill="#e8e6e0"/>
-    <ellipse cx="110" cy="45" rx="45" ry="22" fill="#d8d5cc"/>
-    <circle cx="82" cy="88" r="11" fill="#050505"/>
-    <circle cx="138" cy="88" r="11" fill="#050505"/>
-    <circle cx="86" cy="84" r="3.5" fill="#ffffff"/>
-    <circle cx="142" cy="84" r="3.5" fill="#ffffff"/>
-    <path d="M58 126 L162 112 L156 138 Z" fill="#e8801a"/>
-    <path d="M60 148 L158 150 L148 170 Z" fill="#c96a10"/>
-    <path d="M70 132 L150 122" stroke="#8a4a08" stroke-width="3"/>
-    <path d="M66 152 L152 154" stroke="#8a4a08" stroke-width="3"/>
-  </svg>
+  <div id="hotbar"></div>
 </div>
 
 <div id="menu-overlay" class="overlay">
-  <h1 class="title">THE MONSTER</h1>
-  <div class="subtitle">ВЫБЕРИ КАРТУ</div>
+  <h1 class="title">THE SANDBOX GAME</h1>
+  <div class="subtitle">ПОСТРОЙ СВОЙ МИР</div>
   <div class="map-row">
     <div class="map-card selected" data-map="yard">
       <div class="map-icon">🏚️</div>
       <div class="map-name">Двор</div>
-      <div class="map-desc">Старый двор-лабиринт, фонари</div>
+      <div class="map-desc">Старый двор, фонари</div>
     </div>
     <div class="map-card" data-map="forest">
       <div class="map-icon">🌲</div>
       <div class="map-name">Лес</div>
-      <div class="map-desc">Ночной лес, деревья и туман</div>
+      <div class="map-desc">Лес и туман</div>
     </div>
     <div class="map-card" data-map="city">
-      <div class="map-icon">☣️</div>
-      <div class="map-name">Заражённый город</div>
-      <div class="map-desc">Токсичные улицы и бочки</div>
+      <div class="map-icon">🏙️</div>
+      <div class="map-name">Город</div>
+      <div class="map-desc">Улицы и бочки</div>
     </div>
     <div class="map-card" data-map="village">
       <div class="map-icon">🦢</div>
       <div class="map-name">Село Сулоаоу</div>
-      <div class="map-desc">Мирное село. Мирное?</div>
+      <div class="map-desc">Тихое село</div>
     </div>
   </div>
   <button class="btn" id="start-btn">ИГРАТЬ</button>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
-    Собери <b>6 предохранителей</b> (подойди вплотную — заберутся сами) и найди выход.<br>Свет помогает видеть, но ОНО видит свет.
+    <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-8 / колесо</b> — выбор · <b>T</b> — день/ночь
   </div>
 </div>
 
 <div id="pause-overlay" class="overlay hidden">
   <h2>ПАУЗА</h2>
   <p>Кликни, чтобы продолжить</p>
-</div>
-
-<div id="death-overlay" class="overlay hidden">
-  <h1>ОНО ТЕБЯ НАШЛО</h1>
-  <p id="death-stats"></p>
-  <button class="btn" id="retry-btn" style="margin-top:30px">ПОПРОБОВАТЬ СНОВА</button>
-</div>
-
-<div id="win-overlay" class="overlay hidden">
-  <h1>ТЫ ВЫБРАЛСЯ</h1>
-  <p id="win-stats"></p>
-  <button class="btn" id="again-btn" style="margin-top:30px">СЫГРАТЬ ЕЩЁ РАЗ</button>
 </div>
 
 <div id="rotate-overlay" class="overlay hidden">
@@ -260,12 +180,13 @@
 
 <div id="touch-ui">
   <div id="joy-base"><div id="joy-knob"></div></div>
-  <div class="tbtn" id="btn-flash">🔦</div>
-  <div class="tbtn" id="btn-sprint">🏃</div>
+  <div class="tbtn" id="btn-spawn">➕</div>
+  <div class="tbtn" id="btn-del">🗑️</div>
+  <div class="tbtn" id="btn-day">🌓</div>
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
-<div id="boot-error" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:99; background:#3a0000; color:#ffb0b0; border:1px solid #b30000; padding:10px 14px; font:13px 'Courier New',monospace; border-radius:6px;"></div>
+<div id="boot-error" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:99; background:#3a2a00; color:#ffe0b0; border:1px solid #d89628; padding:10px 14px; font:13px 'Courier New',monospace; border-radius:6px;"></div>
 <script>
 (function () {
   var el = document.getElementById('boot-error');
@@ -278,6 +199,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=8"></script>
+<script type="module" src="game.js?v=9"></script>
 </body>
 </html>
