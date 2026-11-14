@@ -137,6 +137,14 @@
   #btn-car { right: 302px; bottom: 160px; display: none; }
   body.touch #btn-car.nearest { display: flex; }
   #btn-pause { top: 14px; right: 14px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px; }
+  #btn-bag { top: 14px; right: 74px; width: 50px; height: 50px; border-radius: 10px; font-size: 20px; }
+  #bag-list { margin-top: 18px; width: min(440px, 92vw); max-height: 46vh; overflow-y: auto; }
+  .bag-row { display: flex; align-items: center; gap: 10px; background: #141210; border: 1px solid #2c2c2c; padding: 8px 12px; margin-bottom: 6px; cursor: pointer; font: 700 13px 'Courier New', monospace; color: #d8c9a8; }
+  .bag-row:hover { border-color: #d89628; }
+  .bag-row .cnt { margin-left: auto; color: #d89628; }
+  .bag-row .rm { color: #b06060; padding: 2px 8px; }
+  .bag-row .rm:hover { color: #ff8080; }
+  .bag-empty { color: #6a655c; font: 700 13px 'Courier New', monospace; margin-top: 18px; }
   #rotate-overlay { z-index: 40; background: #000; }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
   @keyframes rotate-hint { 0%,20% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
@@ -187,7 +195,7 @@
   <button class="btn" id="start-btn">ИГРАТЬ</button>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
-    <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-8 / колесо</b> — выбор · <b>T</b> — день/ночь<br>
+    <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-8 / колесо</b> — выбор · <b>T</b> — день/ночь · <b>B</b> — рюкзак<br>
     <b>🚨 ПОЛИЦИЯ СЛЕДИТ ЗА ПОРЯДКОМ</b> · за взрывы и наезды — задержание · насмелишься дальше — <b>⚡ божья кара</b> (не убиваемая!)
   </div>
 </div>
@@ -203,7 +211,18 @@
     <button class="btn small" id="export-btn">⬇️ Скачать XML</button>
     <button class="btn small" id="import-btn">⬆️ Открыть XML</button>
   </div>
+  <div class="save-row">
+    <button class="btn small" id="bag-btn">🎒 Рюкзак</button>
+  </div>
   <input type="file" id="xml-file" accept=".xml,text/xml" hidden>
+</div>
+
+<div id="bag-overlay" class="overlay hidden">
+  <h2>🎒 РЮКЗАК</h2>
+  <div id="bag-list"></div>
+  <div class="save-row" style="margin-top:16px;">
+    <button class="btn small" id="bag-close">ЗАКРЫТЬ</button>
+  </div>
 </div>
 
 <div id="rotate-overlay" class="overlay hidden">
@@ -218,6 +237,7 @@
   <div class="tbtn" id="btn-del">🗑️</div>
   <div class="tbtn" id="btn-day">🌓</div>
   <div class="tbtn" id="btn-car">🚗</div>
+  <div class="tbtn" id="btn-bag">🎒</div>
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
@@ -248,6 +268,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=19"></script>
+<script type="module" src="game.js?v=20"></script>
 </body>
 </html>

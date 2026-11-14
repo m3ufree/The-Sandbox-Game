@@ -869,6 +869,7 @@ function checkOrientation() {
 const keys = {};
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
+  if (e.code === 'KeyB' && S.started && !S.driving) { if (S.bagOpen) closeBag(); else openBag(); return; }
   if (!S.playing) return;
   if (e.code === 'KeyF') toggleFlashlight();
   if (e.code === 'KeyT') toggleDayNight();
@@ -2356,6 +2357,85 @@ document.getElementById('xml-file').addEventListener('change', (e) => {
   reader.readAsText(file);
   e.target.value = '';
 });
+
+// ---------- Backpack (inventory) ----------
+const bagOverlay = document.getElementById('bag-overlay');
+const bagList = document.getElementById('bag-list');
+const btnBag = document.getElementById('btn-bag');
+
+function bagCount(id) {
+  let n = 0;
+  for (const o of objects) if (o.id === id) n++;
+  return n;
+}
+
+function renderBag() {
+  bagList.innerHTML = '';
+  let any = false;
+  CATALOG.forEach((def, i) => {
+    const n = bagCount(def.id);
+    if (!n) return;
+    any = true;
+    const row = document.createElement('div');
+    row.className = 'bag-row';
+    row.innerHTML = `<span>${def.icon}</span><span>${def.name}</span><span class="cnt">×${n}</span><span class="rm">🗑</span>`;
+    row.addEventListener('click', () => {
+      selectSlot(i);
+      closeBag();
+    });
+    row.querySelector('.rm').addEventListener('click', (e) => {
+      e.stopPropagation();
+      for (const o of objects.filter(o => o.id === def.id)) removeObject(o);
+      renderBag();
+      playPoof();
+    });
+    bagList.appendChild(row);
+  });
+  if (!any) {
+    const empty = document.createElement('div');
+    empty.className = 'bag-empty';
+    empty.textContent = IS_TOUCH ? 'Пусто. Заспавнь что-нибудь (➕)' : 'Пусто. Заспавнь что-нибудь (ЛКМ)';
+    bagList.appendChild(empty);
+  }
+}
+
+function openBag() {
+  if (!S.started || S.bagOpen || S.driving) return;
+  S.bagOpen = true;
+  renderBag();
+  bagOverlay.classList.remove('hidden');
+  if (!IS_TOUCH && document.pointerLockElement === canvas) document.exitPointerLock();
+  S.playing = false;
+}
+
+function closeBag() {
+  if (!S.bagOpen) return;
+  S.bagOpen = false;
+  bagOverlay.classList.add('hidden');
+  if (IS_TOUCH) {
+    if (S.started) S.playing = true;
+  } else {
+    canvas.requestPointerLock();
+  }
+}
+
+btnBag.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  e.stopPropagation();
+  if (S.bagOpen) closeBag(); else openBag();
+}, { passive: false });
+
+document.getElementById('bag-btn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  openBag();
+});
+
+document.getElementById('bag-close').addEventListener('click', (e) => {
+  e.stopPropagation();
+  closeBag();
+});
+
+bagOverlay.addEventListener('click', (e) => e.stopPropagation());
 
 pauseOverlay.addEventListener('click', () => {
   if (IS_TOUCH) {
