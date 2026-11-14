@@ -652,7 +652,7 @@ const player = {
   vy: 0, onGround: true,
 };
 
-const carState = { speed: 0, heading: 0 };
+const carState = { heading: 0, prevFwd: 0 };
 let engineOsc = null, engineGain = null;
 
 // ---------- Touch controls ----------
@@ -933,6 +933,7 @@ function buildBarrel() {
 
 function buildCar() {
   const g = new THREE.Group();
+  const bodyGroup = new THREE.Group();
   const color = [0x8a2020, 0x204a8a, 0x2c2c2c, 0x8a7a20, 0x3a6a3a][randInt(5)];
   const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.35, metalness: 0.55 });
   const glassMat = new THREE.MeshStandardMaterial({ color: 0x0e141c, roughness: 0.15, metalness: 0.6 });
@@ -942,7 +943,9 @@ function buildCar() {
   cabin.position.set(0, 1.15, -0.25);
   const roof = new THREE.Mesh(new THREE.BoxGeometry(1.75, 0.1, 2.2), bodyMat);
   roof.position.set(0, 1.45, -0.25);
-  g.add(body, cabin, roof);
+  bodyGroup.add(body, cabin, roof);
+  g.add(bodyGroup);
+  g.userData.bodyGroup = bodyGroup;
   const wheelGeo = new THREE.CylinderGeometry(0.34, 0.34, 0.26, 12);
   const wheelMat = new THREE.MeshStandardMaterial({ color: 0x14161a, roughness: 0.9 });
   const hubGeo = new THREE.CylinderGeometry(0.15, 0.15, 0.28, 8);
@@ -1222,13 +1225,15 @@ function explode(obj) {
       const power = 1 - d / 8;
       o.vel.addScaledVector(dir, 13 * power);
       o.vel.y += 7 * power;
+      if (o.type === 'car') o.av = rand(-3, 3);
     }
   }
 }
 
 function updatePhysics(dt) {
   for (const o of objects) {
-    if (S.driving === o) { o.vel.set(0, 0, 0); continue; }
+    if (S.driving === o) continue;
+    if (o.av && o.mesh.position.y > 0.05) o.mesh.rotation.y += o.av * dt;
     if (o.vel.lengthSq() < 0.0001) continue;
     o.vel.y -= 18 * dt;
     o.mesh.position.addScaledVector(o.vel, dt);
@@ -1237,7 +1242,7 @@ function updatePhysics(dt) {
       o.vel.y *= -0.35;
       o.vel.x *= 0.7;
       o.vel.z *= 0.7;
-      if (o.vel.lengthSq() < 0.05) o.vel.set(0, 0, 0);
+      if (o.vel.lengthSq() < 0.05) { o.vel.set(0, 0, 0); o.av = 0; }
     }
   }
 }
@@ -1264,8 +1269,8 @@ function carCollides(x, z, h) {
 
 function enterCar(obj) {
   S.driving = obj;
-  carState.speed = 0;
   carState.heading = obj.mesh.rotation.y;
+  carState.prevFwd = 0;
   startEngine();
   showMsg('🚗 WASD / джойстик — езда · E — выйти');
   playClick();
@@ -1296,29 +1301,61 @@ function exitCar() {
 function updateCar(dt) {
   const obj = S.driving;
   if (!obj) return;
+  const grounded = obj.mesh.position.y <= 0.02 && obj.vel.y <= 0.01;
   const joy = touchInput.moveId !== null;
-  const throttle = joy ? -touchInput.moveZ : ((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0));
-  const steer = joy ? touchInput.moveX : ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0));
-  carState.speed += throttle * 9 * dt;
-  carState.speed *= (1 - 1.1 * dt);
-  carState.speed = clamp(carState.speed, -7, 16);
-  carState.heading += steer * dt * 2.1 * clamp(Math.abs(carState.speed) / 6, 0, 1) * (carState.speed < 0 ? -1 : 1);
+  const throttle = grounded ? (joy ? -touchInput.moveZ : ((keys['KeyW'] ? 1 : 0) - (keys['KeyS'] ? 1 : 0))) : 0;
+  const steer = grounded ? (joy ? touchInput.moveX : ((keys['KeyA'] ? 1 : 0) - (keys['KeyD'] ? 1 : 0))) : 0;
+
   const fx = Math.sin(carState.heading), fz = Math.cos(carState.heading);
-  const nx = obj.mesh.position.x + fx * carState.speed * dt;
-  const nz = obj.mesh.position.z + fz * carState.speed * dt;
-  if (carCollides(nx, nz, carState.heading)) {
-    if (Math.abs(carState.speed) > 7) { S.shakeT = 0.3; playBoom(); }
-    carState.speed = 0;
-  } else {
-    obj.mesh.position.x = nx;
-    obj.mesh.position.z = nz;
+  const rx = Math.cos(carState.heading), rz = -Math.sin(carState.heading);
+  let fwdSpeed = obj.vel.x * fx + obj.vel.z * fz;
+  let latSpeed = obj.vel.x * rx + obj.vel.z * rz;
+
+  if (grounded) {
+    fwdSpeed += throttle * 10 * dt;
+    fwdSpeed *= (1 - (throttle !== 0 ? 0.4 : 2.2) * dt);
+    latSpeed *= (1 - 6 * dt);
+    carState.heading += steer * dt * 2.1 * clamp(Math.abs(fwdSpeed) / 6, 0, 1) * (fwdSpeed < 0 ? -1 : 1);
   }
+  fwdSpeed = clamp(fwdSpeed, -7, 17);
+  obj.vel.x = fx * fwdSpeed + rx * latSpeed;
+  obj.vel.z = fz * fwdSpeed + rz * latSpeed;
+
+  obj.vel.y -= 18 * dt;
+  obj.mesh.position.addScaledVector(obj.vel, dt);
+  if (obj.mesh.position.y < 0) {
+    obj.mesh.position.y = 0;
+    if (obj.vel.y < -6) { S.shakeT = 0.3; playBoom(); }
+    obj.vel.y = Math.abs(obj.vel.y) > 1.5 ? obj.vel.y * -0.3 : 0;
+    obj.vel.x *= 0.82;
+    obj.vel.z *= 0.82;
+  }
+
+  if (carCollides(obj.mesh.position.x, obj.mesh.position.z, carState.heading)) {
+    obj.mesh.position.addScaledVector(obj.vel, -dt);
+    if (Math.abs(fwdSpeed) > 7) { S.shakeT = 0.3; playBoom(); }
+    const bounce = -fwdSpeed * 0.3;
+    obj.vel.x = fx * bounce + rx * latSpeed * 0.4;
+    obj.vel.z = fz * bounce + rz * latSpeed * 0.4;
+  }
+
+  const body = obj.mesh.userData.bodyGroup;
+  if (body) {
+    const accel = (fwdSpeed - carState.prevFwd) / Math.max(dt, 0.001);
+    carState.prevFwd = fwdSpeed;
+    const targetPitch = clamp(-accel * 0.006, -0.09, 0.09);
+    const targetRoll = clamp(-steer * fwdSpeed * 0.012, -0.12, 0.12);
+    const k = Math.min(1, 8 * dt);
+    body.rotation.x += (targetPitch - body.rotation.x) * k;
+    body.rotation.z += (targetRoll - body.rotation.z) * k;
+  }
+
   obj.mesh.rotation.y = carState.heading;
-  obj.vel.set(0, 0, 0);
   player.pos.set(obj.mesh.position.x, EYE_HEIGHT, obj.mesh.position.z);
   if (engineOsc && engineGain) {
-    engineOsc.frequency.value = 55 + Math.abs(carState.speed) * 9;
-    engineGain.gain.value = Math.min(0.09, 0.025 + Math.abs(carState.speed) * 0.004);
+    const sp = Math.abs(fwdSpeed);
+    engineOsc.frequency.value = 55 + sp * 9;
+    engineGain.gain.value = Math.min(0.09, 0.025 + sp * 0.004);
   }
 }
 
