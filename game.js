@@ -1710,6 +1710,7 @@ function nukeDevastation(p, radius) {
   crimes = 0;
   crimeTimer = 0;
   copSpawnT = 0;
+  S.staticT = 12;
   for (const o of [...objects]) removeObject(o);
   const zeroM = new THREE.Matrix4();
   const _im = new THREE.Matrix4();
@@ -2504,6 +2505,39 @@ function showMsg(text) {
 
 function updateFX(dt) {
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
+  updateStatic(dt);
+}
+
+const noiseCanvas = document.createElement('canvas');
+noiseCanvas.width = 160;
+noiseCanvas.height = 90;
+noiseCanvas.style.cssText = 'position:fixed;left:0;top:0;width:100%;height:100%;image-rendering:pixelated;pointer-events:none;z-index:18;opacity:0;display:none;';
+document.body.appendChild(noiseCanvas);
+const noiseCtx = noiseCanvas.getContext('2d');
+const noiseImg = noiseCtx.createImageData(160, 90);
+let noiseFrame = 0;
+
+function updateStatic(dt) {
+  if (!S.staticT || S.staticT <= 0) return;
+  S.staticT -= dt;
+  if (S.staticT <= 0) {
+    S.staticT = 0;
+    noiseCanvas.style.display = 'none';
+    return;
+  }
+  noiseCanvas.style.display = 'block';
+  noiseCanvas.style.opacity = Math.min(0.6, (S.staticT / 12) * 0.6 + 0.06);
+  noiseFrame++;
+  if (noiseFrame % 2) return;
+  const d = noiseImg.data;
+  for (let i = 0; i < d.length; i += 4) {
+    const v = (Math.random() * 255) | 0;
+    d[i] = v;
+    d[i + 1] = v;
+    d[i + 2] = v;
+    d[i + 3] = 255;
+  }
+  noiseCtx.putImageData(noiseImg, 0, 0);
 }
 
 // ---------- Audio ----------
