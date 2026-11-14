@@ -452,7 +452,7 @@ function addCityProps() {
     car.position.set(c.x, 0, c.z);
     car.rotation.y = Math.random() < 0.5 ? 0 : Math.PI / 2;
     worldGroup.add(car);
-    objects.push({ mesh: car, vel: new THREE.Vector3(), tnt: false, type: 'car' });
+    objects.push({ mesh: car, vel: new THREE.Vector3(), tnt: false, type: 'car', id: 'car' });
   }
 }
 
@@ -1112,14 +1112,14 @@ function buildTnt() {
 }
 
 const CATALOG = [
-  { name: 'ЯЩИК', icon: '📦', build: buildBox },
-  { name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
-  { name: 'МАШИНА', icon: '🚗', build: buildCar, drive: true },
-  { name: 'ДЕРЕВО', icon: '🌳', build: buildTree },
-  { name: 'ФОНАРЬ', icon: '🏮', build: buildLamp },
-  { name: 'СТОГ', icon: '🌾', build: buildHay },
-  { name: 'КОЛОДЕЦ', icon: '⛲', build: buildWell },
-  { name: 'ТНТ', icon: '💥', build: buildTnt, tnt: true },
+  { id: 'box', name: 'ЯЩИК', icon: '📦', build: buildBox },
+  { id: 'barrel', name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
+  { id: 'car', name: 'МАШИНА', icon: '🚗', build: buildCar, drive: true },
+  { id: 'tree', name: 'ДЕРЕВО', icon: '🌳', build: buildTree },
+  { id: 'lamp', name: 'ФОНАРЬ', icon: '🏮', build: buildLamp },
+  { id: 'hay', name: 'СТОГ', icon: '🌾', build: buildHay },
+  { id: 'well', name: 'КОЛОДЕЦ', icon: '⛲', build: buildWell },
+  { id: 'tnt', name: 'ТНТ', icon: '💥', build: buildTnt, tnt: true },
 ];
 
 function buildHotbar() {
@@ -1149,7 +1149,7 @@ function spawnSelected() {
   mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
   mesh.rotation.y = player.yaw + Math.PI;
   spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop' });
+  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id });
   playPop();
 }
 
@@ -1347,6 +1347,99 @@ function stopEngine() {
   engineGain = null;
 }
 
+// ---------- Save / Load (XML) ----------
+const SAVE_KEY = 'sandbox-save-v1';
+
+function worldToXML() {
+  let xml = '<?xml version="1.0" encoding="UTF-8"?>\n<sandbox map="' + S.map + '"';
+  xml += ' night="' + (S.night ? 1 : 0) + '"';
+  xml += ' px="' + player.pos.x.toFixed(2) + '" pz="' + player.pos.z.toFixed(2) + '" yaw="' + player.yaw.toFixed(3) + '">\n';
+  for (const o of objects) {
+    if (!o.id) continue;
+    xml += '  <object type="' + o.id + '"';
+    xml += ' x="' + o.mesh.position.x.toFixed(2) + '"';
+    xml += ' y="' + o.mesh.position.y.toFixed(2) + '"';
+    xml += ' z="' + o.mesh.position.z.toFixed(2) + '"';
+    xml += ' ry="' + o.mesh.rotation.y.toFixed(3) + '"/>\n';
+  }
+  xml += '</sandbox>';
+  return xml;
+}
+
+function loadFromXML(text) {
+  let doc;
+  try { doc = new DOMParser().parseFromString(text, 'text/xml'); }
+  catch (e) { return false; }
+  if (doc.querySelector('parsererror')) return false;
+  const root = doc.querySelector('sandbox');
+  if (!root || !MAPS[root.getAttribute('map')]) return false;
+
+  S.map = root.getAttribute('map');
+  buildWorld(S.map);
+  S.night = root.getAttribute('night') === '1';
+  applyAtmosphere();
+
+  const px = parseFloat(root.getAttribute('px'));
+  const pz = parseFloat(root.getAttribute('pz'));
+  const yaw = parseFloat(root.getAttribute('yaw'));
+  if (!Number.isNaN(px) && !Number.isNaN(pz) && !collides(px, pz)) {
+    player.pos.set(px, EYE_HEIGHT, pz);
+  }
+  if (!Number.isNaN(yaw)) player.yaw = yaw;
+
+  for (const el of doc.querySelectorAll('object')) {
+    const def = CATALOG.find(d => d.id === el.getAttribute('type'));
+    if (!def) continue;
+    const x = parseFloat(el.getAttribute('x'));
+    const y = parseFloat(el.getAttribute('y')) || 0;
+    const z = parseFloat(el.getAttribute('z'));
+    if ([x, z].some(Number.isNaN)) continue;
+    const mesh = def.build();
+    mesh.position.set(x, y, z);
+    mesh.rotation.y = parseFloat(el.getAttribute('ry')) || 0;
+    spawnedGroup.add(mesh);
+    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id });
+  }
+
+  document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
+  if (S.started) mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
+  return true;
+}
+
+function saveLocal(silent) {
+  try {
+    localStorage.setItem(SAVE_KEY, worldToXML());
+    if (!silent) { showMsg('💾 Карта сохранена'); playClick(); }
+  } catch (e) {
+    if (!silent) showMsg('⚠️ Ошибка сохранения');
+  }
+}
+
+function loadLocal() {
+  const xml = localStorage.getItem(SAVE_KEY);
+  if (!xml) { showMsg('Нет сохранений'); return; }
+  if (loadFromXML(xml)) { showMsg('📂 Карта загружена'); playClick(); }
+  else showMsg('⚠️ Сохранение повреждено');
+}
+
+function exportXML() {
+  const blob = new Blob([worldToXML()], { type: 'text/xml' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'sandbox-map.xml';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showMsg('⬇️ sandbox-map.xml скачан');
+  playClick();
+}
+
+function importXML() {
+  document.getElementById('xml-file').click();
+}
+
+window.addEventListener('pagehide', () => { try { saveLocal(true); } catch (e) {} });
+setInterval(() => { if (S.started) saveLocal(true); }, 20000);
+
 // ---------- HUD ----------
 let msgTimer = 0;
 function showMsg(text) {
@@ -1492,6 +1585,23 @@ document.querySelectorAll('.map-card').forEach(card => {
 });
 
 document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('save-btn').addEventListener('click', (e) => { e.stopPropagation(); saveLocal(); });
+document.getElementById('load-btn').addEventListener('click', (e) => { e.stopPropagation(); loadLocal(); });
+document.getElementById('export-btn').addEventListener('click', (e) => { e.stopPropagation(); exportXML(); });
+document.getElementById('import-btn').addEventListener('click', (e) => { e.stopPropagation(); importXML(); });
+
+document.getElementById('xml-file').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    if (loadFromXML(String(reader.result))) { showMsg('⬆️ Карта открыта'); playClick(); }
+    else showMsg('⚠️ Не XML-файл карты');
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+});
+
 pauseOverlay.addEventListener('click', () => {
   if (IS_TOUCH) {
     S.playing = true;

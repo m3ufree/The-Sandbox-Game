@@ -35,6 +35,9 @@
   }
   .btn:hover { background: #d89628; border-color: #d89628; color: #000; box-shadow: 0 0 26px rgba(216,150,40,0.55); }
 
+  .save-row { display: flex; gap: 10px; margin-top: 22px; }
+  .btn.small { padding: 10px 18px; font-size: 14px; letter-spacing: 0.08em; border-left-width: 4px; }
+
   .help { margin-top: 24px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
   .help b { color: #c9c2b8; }
 
@@ -181,6 +184,15 @@
 <div id="pause-overlay" class="overlay hidden">
   <h2>ПАУЗА</h2>
   <p>Кликни, чтобы продолжить</p>
+  <div class="save-row">
+    <button class="btn small" id="save-btn">💾 Сохранить</button>
+    <button class="btn small" id="load-btn">📂 Загрузить</button>
+  </div>
+  <div class="save-row">
+    <button class="btn small" id="export-btn">⬇️ Скачать XML</button>
+    <button class="btn small" id="import-btn">⬆️ Открыть XML</button>
+  </div>
+  <input type="file" id="xml-file" accept=".xml,text/xml" hidden>
 </div>
 
 <div id="rotate-overlay" class="overlay hidden">
@@ -211,6 +223,6 @@
   }, 6000);
 })();
 </script>
-<script type="module" src="game.js?v=11"></script>
+<script type="module" src="game.js?v=12"></script>
 </body>
 </html>
