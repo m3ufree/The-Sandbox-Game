@@ -878,6 +878,11 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyV' || e.code === 'KeyC') {
     const o = findAimed();
     if (o && o.tv) { if (e.code === 'KeyV') setTvLink(o); else watchTv(o); }
+    else if (o && o.console && e.code === 'KeyC') {
+      const tv = nearestTvTo(o);
+      if (tv) watchTv(tv);
+      else showMsg('⚠️ Поставь приставку рядом с телевизором (до 5 м)');
+    }
   }
   const digit = e.code.match(/^Digit([1-9])$/);
   if (digit) selectSlot(Math.min(parseInt(digit[1], 10) - 1, CATALOG.length - 1));
@@ -1389,6 +1394,70 @@ function buildTvRetro() {
   return g;
 }
 
+function buildConsole() {
+  const g = new THREE.Group();
+  const bodyMat = new THREE.MeshStandardMaterial({ color: 0x2a2d33, roughness: 0.5 });
+  const body = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.18, 0.65), bodyMat);
+  body.position.y = 0.09;
+  const top = new THREE.Mesh(new THREE.BoxGeometry(0.9, 0.06, 0.65), new THREE.MeshStandardMaterial({ color: 0x3a3f47, roughness: 0.4 }));
+  top.position.y = 0.2;
+  const cart = new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.12, 0.4), new THREE.MeshStandardMaterial({ color: 0x8a8f98, roughness: 0.6 }));
+  cart.position.set(-0.15, 0.29, 0.05);
+  cart.rotation.x = -0.25;
+  const led = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.02, 0.06), new THREE.MeshBasicMaterial({ color: 0xff3030 }));
+  led.position.set(0.35, 0.24, -0.2);
+  const padMat = new THREE.MeshStandardMaterial({ color: 0x1c1e22, roughness: 0.6 });
+  const padG = new THREE.BoxGeometry(0.24, 0.05, 0.13);
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x16181c, roughness: 0.7 });
+  const cableG = new THREE.CylinderGeometry(0.012, 0.012, 0.55, 6);
+  const p1 = new THREE.Mesh(padG, padMat);
+  p1.position.set(-0.75, 0.025, 0.55);
+  p1.rotation.y = 0.4;
+  const c1 = new THREE.Mesh(cableG, cableMat);
+  c1.position.set(-0.5, 0.03, 0.32);
+  c1.rotation.z = Math.PI / 2;
+  c1.rotation.y = 0.45;
+  const p2 = new THREE.Mesh(padG, padMat);
+  p2.position.set(0.75, 0.025, 0.55);
+  p2.rotation.y = -0.4;
+  const c2 = new THREE.Mesh(cableG, cableMat);
+  c2.position.set(0.5, 0.03, 0.32);
+  c2.rotation.z = Math.PI / 2;
+  c2.rotation.y = -0.45;
+  g.add(body, top, cart, led, p1, c1, p2, c2);
+  g.userData.console = true;
+  return g;
+}
+
+function buildConnector() {
+  const g = new THREE.Group();
+  const cableMat = new THREE.MeshStandardMaterial({ color: 0x1e2022, roughness: 0.7 });
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(-0.65, 0.03, 0),
+    new THREE.Vector3(-0.3, 0.03, 0.18),
+    new THREE.Vector3(0, 0.4, 0.22),
+    new THREE.Vector3(0.3, 0.03, 0.18),
+    new THREE.Vector3(0.65, 0.03, 0),
+  ]);
+  const tube = new THREE.Mesh(new THREE.TubeGeometry(curve, 24, 0.028, 6), cableMat);
+  const plugMat = new THREE.MeshStandardMaterial({ color: 0x35393f, roughness: 0.4, metalness: 0.5 });
+  const tipMat = new THREE.MeshStandardMaterial({ color: 0xb8b09a, roughness: 0.3, metalness: 0.8 });
+  const plugG = new THREE.BoxGeometry(0.12, 0.07, 0.09);
+  const tipG = new THREE.CylinderGeometry(0.016, 0.016, 0.08, 8);
+  const plug1 = new THREE.Mesh(plugG, plugMat);
+  plug1.position.set(-0.72, 0.045, 0);
+  const tip1 = new THREE.Mesh(tipG, tipMat);
+  tip1.rotation.z = Math.PI / 2;
+  tip1.position.set(-0.81, 0.045, 0);
+  const plug2 = new THREE.Mesh(plugG, plugMat);
+  plug2.position.set(0.72, 0.045, 0);
+  const tip2 = new THREE.Mesh(tipG, tipMat);
+  tip2.rotation.z = Math.PI / 2;
+  tip2.position.set(0.81, 0.045, 0);
+  g.add(tube, plug1, tip1, plug2, tip2);
+  return g;
+}
+
 const CATALOG = [
   { id: 'box', name: 'ЯЩИК', icon: '📦', build: buildBox },
   { id: 'barrel', name: 'БОЧКА', icon: '🛢️', build: buildBarrel },
@@ -1405,6 +1474,8 @@ const CATALOG = [
   { id: 'tv-flat', name: 'ТВ ПЛОСКИЙ', icon: '📺', build: buildTvFlat, tv: true },
   { id: 'tv-big', name: 'ТВ КИНОТЕАТР', icon: '📺', build: buildTvBig, tv: true },
   { id: 'tv-retro', name: 'ТВ РЕТРО', icon: '📺', build: buildTvRetro, tv: true },
+  { id: 'console', name: 'ПРИСТАВКА', icon: '🎮', build: buildConsole, console: true },
+  { id: 'connector', name: 'КОННЕКТОР', icon: '🔌', build: buildConnector },
 ];
 
 const BOMBS = {
@@ -2513,6 +2584,7 @@ function ensureTvVideo() {
 }
 
 function stopTvScreen() {
+  S.gameOn = false;
   if (S.tvObj) {
     const scr = S.tvObj.mesh.userData.screen;
     if (scr) {
@@ -2527,9 +2599,99 @@ function stopTvScreen() {
   tvIframe.src = 'about:blank';
 }
 
+function nearestTvTo(o) {
+  let best = null, bd = 5;
+  for (const t of objects) {
+    if (!t.tv) continue;
+    const d = t.mesh.position.distanceTo(o.mesh.position);
+    if (d < bd) { bd = d; best = t; }
+  }
+  return best;
+}
+
+function nearestConsoleTo(tv) {
+  let best = null, bd = 5;
+  for (const c of objects) {
+    if (c.id !== 'console') continue;
+    const d = c.mesh.position.distanceTo(tv.mesh.position);
+    if (d < bd) { bd = d; best = c; }
+  }
+  return best;
+}
+
+const gameCanvas = document.createElement('canvas');
+gameCanvas.width = 256;
+gameCanvas.height = 192;
+const gameCtx = gameCanvas.getContext('2d');
+let gameTexture = null;
+const gameSt = { bx: 128, by: 96, vx: 130, vy: 85, p1: 96, p2: 96, s1: 0, s2: 0 };
+
+function resetBall() {
+  gameSt.bx = 128;
+  gameSt.by = 96;
+  gameSt.vx = (Math.random() < 0.5 ? -1 : 1) * 130;
+  gameSt.vy = (Math.random() - 0.5) * 160;
+}
+
+function startGameMode(tvObj) {
+  const wasSame = S.tvObj === tvObj && S.gameOn;
+  stopTvScreen();
+  if (wasSame) { showMsg('🎮 Приставка выключена'); return; }
+  S.tvObj = tvObj;
+  S.gameOn = true;
+  const scr = tvObj.mesh.userData.screen;
+  if (!gameTexture) {
+    gameTexture = new THREE.CanvasTexture(gameCanvas);
+    gameTexture.colorSpace = THREE.SRGBColorSpace;
+  }
+  if (scr) {
+    scr.material.map = gameTexture;
+    scr.material.color.set(0xffffff);
+    scr.material.needsUpdate = true;
+  }
+  showMsg('🎮 Понг на экране! C — выключить');
+}
+
+function updateTvGame(dt) {
+  const st = gameSt, W = 256, H = 192;
+  st.bx += st.vx * dt;
+  st.by += st.vy * dt;
+  if (st.by < 6) { st.by = 6; st.vy = Math.abs(st.vy); }
+  if (st.by > H - 6) { st.by = H - 6; st.vy = -Math.abs(st.vy); }
+  if (st.bx < 16 && Math.abs(st.by - st.p1) < 22 && st.vx < 0) st.vx = Math.min(Math.abs(st.vx) * 1.06, 280);
+  if (st.bx > W - 16 && Math.abs(st.by - st.p2) < 22 && st.vx > 0) st.vx = -Math.min(Math.abs(st.vx) * 1.06, 280);
+  if (st.bx < 0) { st.s2++; resetBall(); }
+  if (st.bx > W) { st.s1++; resetBall(); }
+  st.p1 = clamp(st.p1 + clamp(st.by - st.p1, -95 * dt, 95 * dt), 22, H - 22);
+  st.p2 = clamp(st.p2 + clamp(st.by - st.p2, -80 * dt, 80 * dt), 22, H - 22);
+  const c = gameCtx;
+  c.fillStyle = '#0a120c';
+  c.fillRect(0, 0, W, H);
+  c.strokeStyle = '#2c5a38';
+  c.setLineDash([6, 8]);
+  c.beginPath();
+  c.moveTo(W / 2, 8);
+  c.lineTo(W / 2, H - 8);
+  c.stroke();
+  c.setLineDash([]);
+  c.fillStyle = '#39ff70';
+  c.font = 'bold 30px monospace';
+  c.textAlign = 'center';
+  c.fillText(String(st.s1), W / 2 - 40, 38);
+  c.fillText(String(st.s2), W / 2 + 40, 38);
+  c.fillRect(10, st.p1 - 20, 5, 40);
+  c.fillRect(W - 15, st.p2 - 20, 5, 40);
+  c.fillRect(st.bx - 3, st.by - 3, 6, 6);
+  gameTexture.needsUpdate = true;
+}
+
 function watchTv(o) {
   const p = parseVideo(o.url);
-  if (!p) { setTvLink(o); return; }
+  if (!p) {
+    if (nearestConsoleTo(o)) { startGameMode(o); return; }
+    setTvLink(o);
+    return;
+  }
   const wasSame = S.tvObj === o;
   stopTvScreen();
   if (wasSame) { showMsg('📺 ТВ выключен'); return; }
@@ -2596,6 +2758,11 @@ btnTvWatch.addEventListener('touchstart', (e) => {
   e.stopPropagation();
   const o = findAimed();
   if (o && o.tv) watchTv(o);
+  else if (o && o.console) {
+    const tv = nearestTvTo(o);
+    if (tv) watchTv(tv);
+    else showMsg('⚠️ Поставь приставку рядом с телевизором (до 5 м)');
+  }
 }, { passive: false });
 
 btnTvLink.addEventListener('touchstart', (e) => {
@@ -2726,6 +2893,7 @@ function loop(now) {
         const near = nearestCar();
         const aim = near ? null : findAimed();
         const tvAim = aim && aim.tv ? aim : null;
+        const conAim = aim && aim.console ? aim : null;
         if (near) {
           promptEl.textContent = IS_TOUCH ? '🚗 — сесть в машину' : 'E — сесть в машину';
           promptEl.style.opacity = 1;
@@ -2734,16 +2902,23 @@ function loop(now) {
             ? (IS_TOUCH ? '📺 — смотреть · 🔗 — сменить' : 'C — смотреть · V — сменить ссылку')
             : (IS_TOUCH ? '🔗 — вставить ссылку' : 'V — вставить ссылку (YouTube/mp4)');
           promptEl.style.opacity = 1;
+        } else if (conAim) {
+          const tvForCon = nearestTvTo(conAim);
+          promptEl.textContent = tvForCon
+            ? (IS_TOUCH ? '📺 — играть на приставке' : 'C — играть на приставке')
+            : (IS_TOUCH ? 'Поставь рядом телевизор (до 5 м)' : 'Поставь приставку рядом с ТВ (до 5 м)');
+          promptEl.style.opacity = 1;
         } else if (promptEl.style.opacity) {
           promptEl.style.opacity = 0;
         }
         btnCar.classList.toggle('nearest', !!near || !!S.driving);
-        btnTvWatch.classList.toggle('nearest', !!tvAim);
+        btnTvWatch.classList.toggle('nearest', !!tvAim || !!(conAim && nearestTvTo(conAim)));
         btnTvLink.classList.toggle('nearest', !!tvAim);
       }
       updatePhysics(dt);
       updateNPCs(dt);
       updateFX(dt);
+      if (S.gameOn && S.tvObj) updateTvGame(dt);
     } else {
       camera.position.set(player.pos.x, player.pos.y, player.pos.z);
       camera.rotation.set(player.pitch, player.yaw, 0);
