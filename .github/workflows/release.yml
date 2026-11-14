@@ -57,6 +57,15 @@ jobs:
         with:
           name: sandbox-apk
           path: rel
+      - name: Rename APK
+        run: mv rel/app-debug.apk rel/tsg.apk
+      - name: Clean old release assets
+        run: |
+          for id in $(gh api "repos/${{ github.repository }}/releases/tags/${{ github.ref_name }}" --jq '.assets[].id' 2>/dev/null); do
+            gh api -X DELETE "repos/${{ github.repository }}/releases/assets/$id" || true
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
       - name: Create release
         uses: softprops/action-gh-release@v2
         with:
@@ -65,7 +74,7 @@ jobs:
             ## Скачивания
 
             - **TheSandboxGame...exe** — версия для Windows (portable, не требует установки). Запусти файл и играй.
-            - **app-debug.apk** — версия для Android. Скачай, открой, разреши установку из неизвестных источников.
+            - **tsg.apk** — версия для Android. Скачай, открой, разреши установку из неизвестных источников.
 
             Требуется интернет (игра грузит движок Three.js с CDN).
 
