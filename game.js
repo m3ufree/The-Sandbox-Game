@@ -1023,6 +1023,33 @@ function playScream() {
   src.start(t); src.stop(t + 1.1);
 }
 
+function playChew() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const src = AC.createBufferSource();
+  src.buffer = noiseBuf;
+  src.playbackRate.value = rand(0.45, 0.75);
+  const f = AC.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.setValueAtTime(750, t);
+  f.frequency.exponentialRampToValueAtTime(110, t + 0.18);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.32, t);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.22);
+  src.connect(f); f.connect(g); g.connect(master);
+  src.start(t); src.stop(t + 0.25);
+
+  const o = AC.createOscillator();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(72, t);
+  o.frequency.exponentialRampToValueAtTime(34, t + 0.15);
+  const og = AC.createGain();
+  og.gain.setValueAtTime(0.26, t);
+  og.gain.exponentialRampToValueAtTime(0.001, t + 0.18);
+  o.connect(og); og.connect(master);
+  o.start(t); o.stop(t + 0.2);
+}
+
 function updateHeartbeat(rate) {
   if (!AC || rate <= 0) { heartTimer = 0; return; }
   heartTimer -= 1 / 60;
@@ -1118,19 +1145,51 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 
+function startEating() {
+  jumpscareEl.classList.remove('on');
+  S.chewT = 0;
+  playChew();
+}
+
+function updateEating(dt) {
+  const t = S.deathTimer - 0.85;
+  const fall = clamp(t / 0.5, 0, 1);
+
+  const dir = M.pos.clone().sub(player.pos); dir.y = 0;
+  if (dir.length() > 1.05) M.pos.addScaledVector(dir.normalize(), 2.5 * dt);
+  monster.position.set(M.pos.x, Math.sin(t * 13) * 0.1, M.pos.z);
+  monster.rotation.y = Math.atan2(player.pos.x - M.pos.x, player.pos.z - M.pos.z);
+  monster.rotation.x = 0.45 + Math.sin(t * 13) * 0.28;
+
+  camera.position.set(
+    player.pos.x + rand(-1, 1) * 0.06,
+    EYE_HEIGHT - fall * 1.2 + rand(-1, 1) * 0.05,
+    player.pos.z + rand(-1, 1) * 0.06
+  );
+  camera.lookAt(M.pos.x, 1.6, M.pos.z);
+  camera.rotation.z += 0.55 * fall;
+
+  damageFlash.style.opacity = clamp(t / 2.2, 0, 0.85).toFixed(2);
+
+  S.chewT -= dt;
+  if (S.chewT <= 0) { S.chewT = rand(0.32, 0.55); playChew(); }
+  updateHeartbeat(0.32);
+}
+
 function die() {
   S.dead = true;
   S.playing = false;
   jumpscareEl.classList.remove('on');
-  damageFlash.style.opacity = 0.9;
+  S.shake = 0;
   const secs = Math.round(S.time);
   setTimeout(() => {
     document.exitPointerLock();
-    deathStats.textContent = `Карта: ${MAPS[S.map].name || S.map} · Предохранители: ${S.fuses}/${FUSE_COUNT} · Время: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+    deathOverlay.querySelector('h1').textContent = 'ОН СЪЕЛ ТЕБЯ';
+    deathStats.textContent = `Карта: ${MAPS[S.map].name} · Предохранители: ${S.fuses}/${FUSE_COUNT} · Время: ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
     deathOverlay.classList.remove('hidden');
     hud.classList.add('hidden');
     damageFlash.style.opacity = 0;
-  }, 400);
+  }, 300);
 }
 
 // ---------- Main loop ----------
@@ -1145,12 +1204,16 @@ function loop(now) {
 
     if (S.deathTimer >= 0 && !S.dead) {
       S.deathTimer += dt;
-      const dir = M.pos.clone().sub(camera.position); dir.y = 0;
-      if (dir.length() > 0.4) M.pos.addScaledVector(dir.normalize(), 9 * dt);
-      monster.position.copy(M.pos);
-      const look = Math.atan2(dir.x, dir.z);
-      camera.rotation.set(0, look + Math.PI, 0);
-      if (S.deathTimer > 0.85) die();
+      if (S.deathTimer < 0.85) {
+        const dir = M.pos.clone().sub(camera.position); dir.y = 0;
+        if (dir.length() > 0.4) M.pos.addScaledVector(dir.normalize(), 9 * dt);
+        monster.position.copy(M.pos);
+        camera.rotation.set(0, Math.atan2(dir.x, dir.z) + Math.PI, 0);
+        if (S.deathTimer >= 0.84) startEating();
+      } else {
+        updateEating(dt);
+        if (S.deathTimer > 3.5) die();
+      }
     } else if (S.playing) {
       updatePlayer(dt);
       updateMonster(dt);
