@@ -2371,19 +2371,23 @@ function bagCount(id) {
 
 function renderBag() {
   bagList.innerHTML = '';
-  let any = false;
   CATALOG.forEach((def, i) => {
     const n = bagCount(def.id);
-    if (!n) return;
-    any = true;
     const row = document.createElement('div');
-    row.className = 'bag-row';
-    row.innerHTML = `<span>${def.icon}</span><span>${def.name}</span><span class="cnt">×${n}</span><span class="rm">🗑</span>`;
+    row.className = 'bag-row' + (i === S.sel ? ' bsel' : '');
+    row.innerHTML = `<span>${def.icon}</span><span>${def.name}</span><span class="cnt">${n ? '×' + n : ''}</span><span class="add">＋</span>${n ? '<span class="rm">🗑</span>' : ''}`;
     row.addEventListener('click', () => {
       selectSlot(i);
       closeBag();
     });
-    row.querySelector('.rm').addEventListener('click', (e) => {
+    row.querySelector('.add').addEventListener('click', (e) => {
+      e.stopPropagation();
+      selectSlot(i);
+      spawnSelected();
+      renderBag();
+    });
+    const rm = row.querySelector('.rm');
+    if (rm) rm.addEventListener('click', (e) => {
       e.stopPropagation();
       for (const o of objects.filter(o => o.id === def.id)) removeObject(o);
       renderBag();
@@ -2391,12 +2395,6 @@ function renderBag() {
     });
     bagList.appendChild(row);
   });
-  if (!any) {
-    const empty = document.createElement('div');
-    empty.className = 'bag-empty';
-    empty.textContent = IS_TOUCH ? 'Пусто. Заспавнь что-нибудь (➕)' : 'Пусто. Заспавнь что-нибудь (ЛКМ)';
-    bagList.appendChild(empty);
-  }
 }
 
 function openBag() {

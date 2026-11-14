@@ -142,8 +142,12 @@
   .bag-row { display: flex; align-items: center; gap: 10px; background: #141210; border: 1px solid #2c2c2c; padding: 8px 12px; margin-bottom: 6px; cursor: pointer; font: 700 13px 'Courier New', monospace; color: #d8c9a8; }
   .bag-row:hover { border-color: #d89628; }
   .bag-row .cnt { margin-left: auto; color: #d89628; }
+  .bag-row .add { color: #8fc98f; padding: 2px 8px; }
+  .bag-row .add:hover { color: #b0ffb0; }
   .bag-row .rm { color: #b06060; padding: 2px 8px; }
   .bag-row .rm:hover { color: #ff8080; }
+  .bag-row.bsel { border-color: #d89628; background: #1c1508; }
+  #bag-overlay p { margin-top: 12px; color: #8a847a; font-size: 12px; font-family: 'Courier New', monospace; font-weight: 700; }
   .bag-empty { color: #6a655c; font: 700 13px 'Courier New', monospace; margin-top: 18px; }
   #rotate-overlay { z-index: 40; background: #000; }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
@@ -219,6 +223,7 @@
 
 <div id="bag-overlay" class="overlay hidden">
   <h2>🎒 РЮКЗАК</h2>
+  <p>Клик — выбрать · ＋ — заспавнить сразу · 🗑 — убрать все этого типа</p>
   <div id="bag-list"></div>
   <div class="save-row" style="margin-top:16px;">
     <button class="btn small" id="bag-close">ЗАКРЫТЬ</button>
@@ -268,6 +273,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=20"></script>
+<script type="module" src="game.js?v=21"></script>
 </body>
 </html>
