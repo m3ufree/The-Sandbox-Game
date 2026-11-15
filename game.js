@@ -926,6 +926,11 @@ document.getElementById('btn-shout').addEventListener('touchstart', (e) => {
   if (S.playing) shout();
 }, { passive: false });
 
+document.getElementById('btn-chaos').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (S.playing) toggleChaos();
+}, { passive: false });
+
 btnCar.addEventListener('touchstart', (e) => {
   e.preventDefault();
   if (!S.playing) return;
@@ -965,6 +970,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') toggleFlashlight();
   if (e.code === 'KeyT') toggleDayNight();
   if (e.code === 'KeyG') shout();
+  if (e.code === 'KeyH') toggleChaos();
   if (e.code === 'KeyX') deleteAimed();
   if (e.code === 'KeyE') { if (S.driving) exitCar(); else { const c = nearestCar(); if (c) enterCar(c); } }
   if (e.code === 'KeyV' || e.code === 'KeyC') {
@@ -2583,6 +2589,83 @@ function playCluck(deep) {
   o.stop(t + 0.12);
 }
 
+// ---------- Chaos mode ----------
+let chaosT = 0;
+function toggleChaos() {
+  S.chaos = !S.chaos;
+  if (S.chaos) {
+    chaosT = 2.5;
+    playThunder();
+    flashScreen();
+    showMsg('🌀 ХАОС РЕЖИМ ВКЛЮЧЁН! Беги.');
+  } else {
+    showMsg('😌 Хаос выключен. Порядок восстановлен.');
+  }
+  mapnameEl.textContent = (S.chaos ? '🌀 ' : '') + MAPS[S.map].name.toUpperCase();
+  const cb = document.getElementById('chaos-btn');
+  if (cb) cb.textContent = S.chaos ? '🌀 Хаос: ВКЛ' : '🌀 Хаос: ВЫКЛ';
+  playClick();
+}
+
+function chaosBoom(p) {
+  playBoom();
+  S.shakeT = Math.max(S.shakeT || 0, 0.5);
+  const flash = new THREE.PointLight(0xffa040, 300, 60, 1.5);
+  flash.position.copy(p).setY(1.5);
+  worldGroup.add(flash);
+  setTimeout(() => { if (worldGroup) worldGroup.remove(flash); }, 160);
+  for (const o of [...objects]) {
+    const d = o.mesh.position.distanceTo(p);
+    if (d < 10) {
+      const dir = o.mesh.position.clone().sub(p).setY(0);
+      if (dir.lengthSq() < 0.01) dir.set(rand(-1, 1), 0, rand(-1, 1));
+      dir.normalize();
+      const power = 1 - d / 10;
+      o.vel.addScaledVector(dir, 15 * power);
+      o.vel.y += 11 * power;
+    }
+  }
+  for (const n of [...npcs]) {
+    if (n.type === 'god' || n.downT > 0) continue;
+    if (Math.hypot(n.mesh.position.x - p.x, n.mesh.position.z - p.z) < 8) knockNPC(n, 3);
+  }
+}
+
+function chaosEvent() {
+  const r = randInt(5);
+  const p = new THREE.Vector3(player.pos.x + rand(-18, 18), 0, player.pos.z + rand(-18, 18));
+  if (r === 0) {
+    chaosBoom(p);
+  } else if (r === 1) {
+    const ids = ['box', 'barrel', 'tnt', 'hay', 'tree', 'lamp'];
+    const def = CATALOG.find(d => d.id === ids[randInt(ids.length)]);
+    if (def) {
+      const o = addSpawned(def, p.x, rand(14, 22), p.z, rand(0, Math.PI * 2));
+      o.vel.set(rand(-2, 2), 0, rand(-2, 2));
+      if (def.tnt) setTimeout(() => { if (objects.includes(o)) explode(o); }, rand(1500, 3500));
+    }
+  } else if (r === 2) {
+    for (const n of npcs) {
+      if (n.type === 'god') continue;
+      fleeFrom(n, player.pos.x, player.pos.z);
+    }
+    playEek();
+    setTimeout(() => playEek(), 200);
+    setTimeout(() => playEek(), 420);
+  } else if (r === 3) {
+    for (const o of objects) {
+      o.vel.y += rand(6, 13);
+      o.vel.x += rand(-5, 5);
+      o.vel.z += rand(-5, 5);
+    }
+    playWhistle();
+  } else {
+    playThunder();
+    flashScreen();
+    S.shakeT = Math.max(S.shakeT || 0, 0.4);
+  }
+}
+
 // ---------- Shout ----------
 let shoutCd = 0;
 function shout() {
@@ -2652,6 +2735,10 @@ function showMsg(text) {
 function updateFX(dt) {
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
   shoutCd = Math.max(0, shoutCd - dt);
+  if (S.chaos) {
+    chaosT -= dt;
+    if (chaosT <= 0) { chaosEvent(); chaosT = rand(2.5, 5); }
+  }
   updateStatic(dt);
 }
 
@@ -2869,10 +2956,10 @@ function startGame() {
 
   menuOverlay.classList.add('hidden');
   hud.classList.remove('hidden');
-  mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
+  mapnameEl.textContent = (S.chaos ? '🌀 ' : '') + MAPS[S.map].name.toUpperCase();
   hintEl.textContent = IS_TOUCH
-    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🎒 рюкзак · 📺 ТВ · 📢 крик'
-    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · B — рюкзак · V/C — ТВ · T — день/ночь · G — крик';
+    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🎒 рюкзак · 📺 ТВ · 📢 крик · 🌀 хаос'
+    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · B — рюкзак · V/C — ТВ · T — день/ночь · G — крик · H — хаос';
   S.started = true;
 
   if (IS_TOUCH) {
