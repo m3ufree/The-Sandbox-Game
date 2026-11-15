@@ -921,6 +921,11 @@ document.getElementById('btn-day').addEventListener('touchstart', (e) => {
   if (S.playing) toggleDayNight();
 }, { passive: false });
 
+document.getElementById('btn-shout').addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  if (S.playing) shout();
+}, { passive: false });
+
 btnCar.addEventListener('touchstart', (e) => {
   e.preventDefault();
   if (!S.playing) return;
@@ -959,6 +964,7 @@ window.addEventListener('keydown', (e) => {
   if (!S.playing) return;
   if (e.code === 'KeyF') toggleFlashlight();
   if (e.code === 'KeyT') toggleDayNight();
+  if (e.code === 'KeyG') shout();
   if (e.code === 'KeyX') deleteAimed();
   if (e.code === 'KeyE') { if (S.driving) exitCar(); else { const c = nearestCar(); if (c) enterCar(c); } }
   if (e.code === 'KeyV' || e.code === 'KeyC') {
@@ -2508,6 +2514,13 @@ function updateNPCs(dt) {
     if (n.type === 'god') updateGod(n, dt);
     else if (n.type === 'cop') updateCop(n, dt);
     else updateCiv(n, dt);
+    if (n.cluckT > 0) {
+      n.cluckT -= dt;
+      n.cluckCd -= dt;
+      if (n.cluckCd <= 0) { playCluck(n.type === 'cop'); n.cluckCd = rand(0.25, 0.85); }
+      if (!n.downT) n.mesh.position.y = Math.abs(Math.sin(n.cluckT * 13)) * 0.12;
+      if (n.cluckT <= 0 && !n.downT) n.mesh.position.y = 0;
+    }
   }
   if (copCount > 0 && sirenT <= 0) { playSiren(); sirenT = 1.6; }
 }
@@ -2526,6 +2539,69 @@ function flashScreen() {
   });
 }
 
+function playScream() {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator();
+  o.type = 'sawtooth';
+  o.frequency.setValueAtTime(500, t);
+  o.frequency.linearRampToValueAtTime(950, t + 0.18);
+  o.frequency.linearRampToValueAtTime(700, t + 0.36);
+  o.frequency.linearRampToValueAtTime(1050, t + 0.5);
+  const vib = AC.createOscillator();
+  vib.type = 'sine';
+  vib.frequency.value = 26;
+  const vg = AC.createGain();
+  vg.gain.value = 130;
+  vib.connect(vg);
+  vg.connect(o.frequency);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.22, t + 0.05);
+  g.gain.setValueAtTime(0.22, t + 0.45);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+  o.connect(g);
+  g.connect(master);
+  o.start(t);
+  o.stop(t + 0.62);
+  vib.start(t);
+  vib.stop(t + 0.62);
+}
+
+function playCluck(deep) {
+  if (!AC) return;
+  const t = AC.currentTime;
+  const o = AC.createOscillator();
+  o.type = 'square';
+  o.frequency.setValueAtTime(deep ? 520 : 760, t);
+  o.frequency.exponentialRampToValueAtTime(deep ? 230 : 330, t + 0.09);
+  const g = AC.createGain();
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(deep ? 0.1 : 0.12, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.001, t + 0.11);
+  o.connect(g);
+  g.connect(master);
+  o.start(t);
+  o.stop(t + 0.12);
+}
+
+// ---------- Shout ----------
+let shoutCd = 0;
+function shout() {
+  if (shoutCd > 0) return;
+  shoutCd = 1.4;
+  playScream();
+  let cnt = 0;
+  for (const n of npcs) {
+    if (n.type === 'god') continue;
+    n.cluckT = 6;
+    n.cluckCd = rand(0.05, 0.4);
+    cnt++;
+    if (n.type === 'civ') fleeFrom(n, player.pos.x, player.pos.z);
+  }
+  showMsg(cnt ? '📢 ААААА!!! Все: КО-КО-КО!!! 🐔' : '📢 ААААА!!! (вокруг никого)');
+}
+
 // ---------- HUD ----------
 let msgTimer = 0;
 function showMsg(text) {
@@ -2536,6 +2612,7 @@ function showMsg(text) {
 
 function updateFX(dt) {
   if (msgTimer > 0) { msgTimer -= dt; if (msgTimer <= 0) msgEl.style.opacity = 0; }
+  shoutCd = Math.max(0, shoutCd - dt);
   updateStatic(dt);
 }
 
@@ -2755,8 +2832,8 @@ function startGame() {
   hud.classList.remove('hidden');
   mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
   hintEl.textContent = IS_TOUCH
-    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🎒 рюкзак · 📺 ТВ'
-    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · B — рюкзак · V/C — ТВ · T — день/ночь';
+    ? '➕ поставить · 🗑️ удалить · 🚗 машина · 🎒 рюкзак · 📺 ТВ · 📢 крик'
+    : 'ЛКМ — поставить · ПКМ/X — удалить · E — машина · B — рюкзак · V/C — ТВ · T — день/ночь · G — крик';
   S.started = true;
 
   if (IS_TOUCH) {
