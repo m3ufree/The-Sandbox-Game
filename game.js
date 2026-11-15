@@ -2511,16 +2511,13 @@ function updateNPCs(dt) {
   if (crimes >= 4 && !npcs.some(n => n.type === 'god') && smiteCd <= 0) spawnGod();
 
   for (const n of [...npcs]) {
+    if (n.cluckT > 0) {
+      updateCluck(n, dt);
+      continue;
+    }
     if (n.type === 'god') updateGod(n, dt);
     else if (n.type === 'cop') updateCop(n, dt);
     else updateCiv(n, dt);
-    if (n.cluckT > 0) {
-      n.cluckT -= dt;
-      n.cluckCd -= dt;
-      if (n.cluckCd <= 0) { playCluck(n.type === 'cop'); n.cluckCd = rand(0.25, 0.85); }
-      if (!n.downT) n.mesh.position.y = Math.abs(Math.sin(n.cluckT * 13)) * 0.12;
-      if (n.cluckT <= 0 && !n.downT) n.mesh.position.y = 0;
-    }
   }
   if (copCount > 0 && sirenT <= 0) { playSiren(); sirenT = 1.6; }
 }
@@ -2594,12 +2591,53 @@ function shout() {
   let cnt = 0;
   for (const n of npcs) {
     if (n.type === 'god') continue;
-    n.cluckT = 6;
+    if (Math.hypot(n.mesh.position.x - player.pos.x, n.mesh.position.z - player.pos.z) > 20) continue;
+    n.state = 'cluck';
+    n.cluckT = 10;
     n.cluckCd = rand(0.05, 0.4);
+    n.cluckAnimT = 0;
     cnt++;
-    if (n.type === 'civ') fleeFrom(n, player.pos.x, player.pos.z);
   }
-  showMsg(cnt ? '📢 ААААА!!! Все: КО-КО-КО!!! 🐔' : '📢 ААААА!!! (вокруг никого)');
+  showMsg(cnt ? '📢 ААААА!!! КУДАХ-КУДАХ! 🐔 (10 сек)' : '📢 ААААА!!! (в радиусе 20 м никого)');
+}
+window.shout = shout;
+
+function updateCluck(n, dt) {
+  n.cluckT -= dt;
+  if (n.downT > 0) {
+    n.downT -= dt;
+    if (n.downT <= 0) reviveNPC(n);
+  }
+  n.cluckAnimT += dt;
+  const t = n.cluckAnimT;
+  const flap = Math.sin(t * 13);
+  const L = n.mesh.userData.limbs;
+  if (L && !n.downT) {
+    L.armL.rotation.set(0, 0, -2.2 + flap * 0.35);
+    L.armR.rotation.set(0, 0, 2.2 - flap * 0.35);
+    L.legL.rotation.x = flap * 0.45;
+    L.legR.rotation.x = -flap * 0.45;
+  }
+  if (!n.downT) {
+    n.mesh.position.y = Math.abs(Math.sin(t * 6.5)) * 0.18;
+    n.mesh.rotation.y = n.dir + Math.sin(t * 3.2) * 0.7;
+  }
+  n.cluckCd -= dt;
+  if (n.cluckCd <= 0) {
+    playCluck(n.type === 'cop');
+    setTimeout(() => playCluck(n.type === 'cop'), 150);
+    n.cluckCd = rand(0.8, 1.4);
+  }
+  if (n.cluckT <= 0) {
+    if (L) {
+      L.armL.rotation.set(0, 0, 0);
+      L.armR.rotation.set(0, 0, 0);
+      L.legL.rotation.set(0, 0, 0);
+      L.legR.rotation.set(0, 0, 0);
+    }
+    if (!n.downT) n.mesh.position.y = 0;
+    if (n.type === 'civ') { n.state = 'wander'; n.t = rand(1, 3); }
+  }
 }
 
 // ---------- HUD ----------
