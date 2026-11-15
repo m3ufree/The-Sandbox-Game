@@ -59,7 +59,7 @@
   #set-sound { width: 100%; accent-color: #d89628; cursor: pointer; }
   #set-sound-val { color: #ffcf5a; font-size: 12px; font-family: 'Courier New', monospace; font-weight: 700; }
   #mp-code { color: #ffcf5a; font-size: 22px; letter-spacing: 0.3em; font-weight: 900; margin: 8px 0; font-family: 'Courier New', monospace; }
-  #mp-status { color: #8a847a; font-size: 12px; margin: 8px 0; font-family: 'Courier New', monospace; font-weight: 700; min-height: 16px; }
+  #mp-status { color: #ffcf5a; font-size: 13px; margin: 10px 0; font-family: 'Courier New', monospace; font-weight: 700; min-height: 18px; max-width: min(460px, 92vw); }
   #mp-join-code {
     background: #141414; border: 2px solid #2c2c2c; color: #ffcf5a;
     font: 700 16px 'Courier New', monospace; letter-spacing: 0.3em;
@@ -309,6 +309,7 @@
     <button class="btn small" id="mp-host">🎮 СОЗДАТЬ ИГРУ</button>
   </div>
   <div id="mp-code">—</div>
+  <div class="save-row"><button class="btn small" id="mp-copy">📋 Скопировать код</button></div>
   <div class="save-row">
     <input id="mp-join-code" placeholder="КОД" maxlength="5" autocomplete="off">
     <button class="btn small" id="mp-join">ПОДКЛЮЧИТЬСЯ</button>
@@ -365,6 +366,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=33"></script>
+<script type="module" src="game.js?v=34"></script>
 </body>
 </html>

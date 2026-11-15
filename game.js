@@ -3208,14 +3208,25 @@ const mpOverlay = document.getElementById('mp-overlay');
 const MP = { peer: null, conns: [], host: false, active: false, code: '', remotes: new Map(), sendT: 0 };
 let mpQuiet = false;
 
+let mpLibState = 0;
+const mpLibCbs = [];
 function mpLib(cb) {
   if (window.Peer) return cb(true);
+  mpLibCbs.push(cb);
+  if (mpLibState === 1) return;
+  mpLibState = 1;
   const s = document.createElement('script');
   s.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
-  s.onload = () => cb(true);
-  s.onerror = () => cb(false);
+  s.onload = () => { mpLibState = 2; mpLibCbs.forEach(f => f(window.Peer ? true : false)); mpLibCbs.length = 0; };
+  s.onerror = () => { mpLibState = 0; mpLibCbs.forEach(f => f(false)); mpLibCbs.length = 0; };
   document.head.appendChild(s);
 }
+
+const MP_ICE = { config: { iceServers: [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:global.stun.twilio.com:3478' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+] } };
 
 function mpStatus(t) { const el = document.getElementById('mp-status'); if (el) el.textContent = t; }
 
@@ -3314,7 +3325,7 @@ function mpOnData(d, c) {
   }
 }
 
-function mpHost() {
+function mpHost(retry) {
   mpLib(ok => {
     if (!ok) return mpStatus('⚠️ Не удалось загрузить сетевую библиотеку. Проверь интернет.');
     if (MP.peer) { try { MP.peer.destroy(); } catch (e) {} }
@@ -3322,11 +3333,14 @@ function mpHost() {
     MP.host = true; MP.active = true;
     for (const pid of [...MP.remotes.keys()]) mpRemoveRemote(pid);
     MP.code = mpGenCode();
+    document.getElementById('mp-code').textContent = '...';
     mpStatus('Создание игры...');
-    const peer = new Peer('tsg-' + MP.code.toLowerCase());
+    const peer = new Peer('tsg-' + MP.code.toLowerCase(), MP_ICE);
     MP.peer = peer;
+    let opened = false;
     peer.on('open', () => {
-      mpStatus('✅ Игра создана! Отправь код другу');
+      opened = true;
+      mpStatus('✅ Игра создана! Отправь код другу — он вводит его и жмёт «Подключиться»');
       document.getElementById('mp-code').textContent = 'КОД: ' + MP.code;
       playClick();
     });
@@ -3334,7 +3348,7 @@ function mpHost() {
       MP.conns.push(c);
       c.on('open', () => {
         c.send({ t: 'init', map: S.map, night: S.night, objs: objects.map(o => ({ id: o.id, x: +o.mesh.position.x.toFixed(2), y: +o.mesh.position.y.toFixed(2), z: +o.mesh.position.z.toFixed(2), ry: +o.mesh.rotation.y.toFixed(2), uid: o.uid })) });
-        mpStatus('✅ Игрок подключился!');
+        mpStatus('✅ Игрок подключился! Можно играть');
         playClick();
       });
       c.on('data', d => mpOnData(d, c));
@@ -3345,7 +3359,21 @@ function mpHost() {
       });
       c.on('error', () => {});
     });
-    peer.on('error', e => mpStatus('⚠️ Ошибка сети: ' + (e.type || 'неизвестно')));
+    peer.on('error', e => {
+      if (e.type === 'unavailable-id' && !(retry > 2)) {
+        try { peer.destroy(); } catch (err) {}
+        mpHost((retry || 0) + 1);
+        return;
+      }
+      if (e.type === 'network' || e.type === 'server-error' || e.type === 'socket-error') {
+        mpStatus('⚠️ Сервер связи недоступен. Проверь интернет (или VPN) и нажми «Создать игру» ещё раз');
+      } else {
+        mpStatus('⚠️ Ошибка сети: ' + (e.type || 'неизвестно'));
+      }
+    });
+    setTimeout(() => {
+      if (!opened && MP.peer === peer) mpStatus('⚠️ Сервер связи не отвечает. Проверь интернет и нажми «Создать игру» ещё раз');
+    }, 12000);
   });
 }
 
@@ -3359,7 +3387,7 @@ function mpJoin(codeRaw) {
     MP.host = false; MP.active = true;
     for (const pid of [...MP.remotes.keys()]) mpRemoveRemote(pid);
     mpStatus('Подключение к ' + code + '...');
-    const peer = new Peer();
+    const peer = new Peer(MP_ICE);
     MP.peer = peer;
     let opened = false;
     peer.on('open', () => {
@@ -3421,7 +3449,17 @@ window.addEventListener('pagehide', () => mpBroadcast({ t: 'bye' }));
 document.getElementById('mp-btn').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.remove('hidden'); });
 document.getElementById('mp-btn2').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.remove('hidden'); });
 document.getElementById('mp-close').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.add('hidden'); });
-document.getElementById('mp-host').addEventListener('click', (e) => { e.stopPropagation(); playClick(); mpHost(); });
+document.getElementById('mp-host').addEventListener('click', (e) => { e.stopPropagation(); playClick(); mpHost(0); });
+document.getElementById('mp-copy').addEventListener('click', (e) => {
+  e.stopPropagation();
+  if (!MP.code) return;
+  const txt = MP.code;
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(txt).then(() => mpStatus('📋 Код скопирован: ' + txt)).catch(() => mpStatus('Код: ' + txt));
+  } else {
+    mpStatus('Код: ' + txt);
+  }
+});
 document.getElementById('mp-join').addEventListener('click', (e) => { e.stopPropagation(); playClick(); mpJoin(document.getElementById('mp-join-code').value); });
 document.getElementById('mp-leave').addEventListener('click', (e) => { e.stopPropagation(); mpLeave(); });
 document.getElementById('mp-join-code').addEventListener('keydown', (e) => {
