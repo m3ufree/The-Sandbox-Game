@@ -103,6 +103,12 @@
     color: #9a948a; font-size: 11px; letter-spacing: 0.08em; font-weight: 700; font-family: 'Courier New', monospace;
     text-shadow: 1px 1px 0 #000; text-align: center;
   }
+  #hp-wrap {
+    position: absolute; top: 14px; left: 14px; width: 170px; height: 20px;
+    background: rgba(0,0,0,0.55); border: 2px solid #2c2c2c; border-left: 4px solid #d89628;
+  }
+  #hp-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 100%; background: linear-gradient(90deg, #c83820, #e86830); transition: width 0.2s; }
+  #hp-num { position: absolute; right: 6px; top: 0; line-height: 16px; font: 700 11px 'Courier New', monospace; color: #ffe9c0; text-shadow: 0 0 3px #000, 0 0 3px #000; }
   #msg {
     position: absolute; bottom: 110px; left: 50%; transform: translateX(-50%);
     color: #e8e4dc; font-size: 15px; letter-spacing: 0.12em; font-weight: 900;
@@ -182,6 +188,14 @@
   #bag-overlay p { margin-top: 12px; color: #8a847a; font-size: 12px; font-family: 'Courier New', monospace; font-weight: 700; }
   .bag-empty { color: #6a655c; font: 700 13px 'Courier New', monospace; margin-top: 18px; }
   #rotate-overlay { z-index: 40; background: #000; }
+  #death-overlay { z-index: 50; background: rgba(26,0,0,0.93); }
+  #death-overlay h2 { color: #e85040; letter-spacing: 0.35em; font-size: 40px; text-shadow: 3px 3px 0 #300; }
+  #death-overlay .icon { font-size: 84px; margin-bottom: 10px; }
+  #death-overlay p { margin-top: 14px; color: #b09080; font-size: 14px; font-family: 'Courier New', monospace; font-weight: 700; }
+  #dmg {
+    position: fixed; inset: 0; pointer-events: none; z-index: 16; opacity: 0;
+    background: radial-gradient(ellipse at center, rgba(190,25,10,0.2) 0%, rgba(150,10,5,0.8) 100%);
+  }
   #rotate-overlay .icon { font-size: 72px; margin-bottom: 20px; animation: rotate-hint 2s infinite; }
   @keyframes rotate-hint { 0%,20% { transform: rotate(0); } 60%,100% { transform: rotate(90deg); } }
 </style>
@@ -190,6 +204,7 @@
 <canvas id="game-canvas"></canvas>
 
 <div id="hud" class="hidden">
+  <div id="hp-wrap"><div id="hp-fill"></div><span id="hp-num">100</span></div>
   <div id="mapname">ДВОР</div>
   <div id="selname"></div>
   <div id="hint">ЛКМ — поставить · ПКМ/X — удалить · 1-8 — выбор · T — день/ночь</div>
@@ -201,7 +216,7 @@
 <div id="menu-overlay" class="overlay">
   <h1 class="title">THE SANDBOX GAME</h1>
   <div class="subtitle">ПОСТРОЙ СВОЙ МИР</div>
-  <div class="verline">ВЕРСИЯ 1.2.0</div>
+  <div class="verline">ВЕРСИЯ 1.3.0</div>
   <div class="map-row">
     <div class="map-card selected" data-map="yard">
       <div class="map-icon">🏚️</div>
@@ -239,6 +254,7 @@
   </div>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
+    <b>🔫 ОРУЖИЕ:</b> пистолет, дробовик, автомат — возьми в рюкзаке (B) · <b>ЛКМ</b> — стрелять · убил NPC — приедет полиция! · <b>❤ HP</b> — полоска слева, восстанавливается со временем<br>
     <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-9 / колесо</b> — выбор · <b>B</b> — рюкзак · <b>V/C</b> — телевизор (YouTube/mp4 на экране!) · <b>🎮 приставка рядом с ТВ</b> — понг на экране · <b>T</b> — день/ночь<br>
     <b>H / 🌀</b> — ХАОС РЕЖИМ: взрывы, дождь из предметов и паника · <b>G / 📢</b> — крик: NPC и полицейские в радиусе 20 м бросают дела и танцуют куриный танец 10 сек 🐔 · <b>🚨 ПОЛИЦИЯ СЛЕДИТ ЗА ПОРЯДКОМ</b> · за взрывы и наезды — задержание · насмелишься дальше — <b>⚡ божья кара</b> (не убиваемая!)
   </div>
@@ -346,7 +362,15 @@
   <div class="tbtn" id="btn-pause">⏸</div>
 </div>
 
+<div id="dmg"></div>
 <div id="flash"></div>
+
+<div id="death-overlay" class="overlay hidden">
+  <div class="icon">☠️</div>
+  <h2>ТЫ УМЕР</h2>
+  <p id="death-reason">Ты погиб</p>
+  <div class="save-row"><button class="btn" id="respawn-btn">ВОЗРОДИТЬСЯ</button></div>
+</div>
 
 <div id="boot-error" style="display:none; position:fixed; left:12px; right:12px; bottom:12px; z-index:99; background:#3a2a00; color:#ffe0b0; border:1px solid #d89628; padding:10px 14px; font:13px 'Courier New',monospace; border-radius:6px;"></div>
 <script>
@@ -373,6 +397,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=38"></script>
+<script type="module" src="game.js?v=39"></script>
 </body>
 </html>
