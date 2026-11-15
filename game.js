@@ -60,6 +60,24 @@ renderer.setPixelRatio(IS_TOUCH ? Math.min(window.devicePixelRatio, 1.5) : Math.
 if (IS_TOUCH) document.body.classList.add('touch');
 renderer.setSize(window.innerWidth, window.innerHeight);
 
+// ---------- Settings ----------
+const SET_KEY = 'tsg-settings-v1';
+const SET = { sound: 70, gfx: 'high', police: true, staticFx: true };
+try { Object.assign(SET, JSON.parse(localStorage.getItem(SET_KEY) || '{}')); } catch (e) {}
+function saveSettings() { try { localStorage.setItem(SET_KEY, JSON.stringify(SET)); } catch (e) {} }
+const GFX_PR = { high: IS_TOUCH ? 1.5 : 2, med: 1, low: 0.66, calc: 0.4 };
+const GFX_FAR = { high: 150, med: 150, low: 110, calc: 80 };
+function applySettings() {
+  if (renderer) renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, GFX_PR[SET.gfx] || 2));
+  if (camera) {
+    camera.far = GFX_FAR[SET.gfx] || 150;
+    camera.updateProjectionMatrix();
+  }
+  if (master) master.gain.value = SET.sound / 100;
+  if (!SET.police) for (const n of [...npcs]) if (n.type === 'cop') removeNPC(n);
+  saveSettings();
+}
+
 const scene = new THREE.Scene();
 
 const camera = new THREE.PerspectiveCamera(72, window.innerWidth / window.innerHeight, 0.1, 150);
@@ -171,6 +189,7 @@ let floors = [];
 let worldGroup = null;
 let spawnedGroup = null;
 let objects = [];
+let uidCounter = 1;
 let builtMap = null;
 const houseRects = [];
 const windowMats = [];
@@ -929,6 +948,7 @@ function checkOrientation() {
 const keys = {};
 window.addEventListener('keydown', (e) => {
   keys[e.code] = true;
+  if (!settingsOverlay.classList.contains('hidden') || !mpOverlay.classList.contains('hidden')) return;
   if (S.sitting) {
     if (e.code === 'KeyC') sleepNow();
     if (e.code === 'Space') standUp();
@@ -1606,16 +1626,25 @@ function selectSlot(i) {
   if (def) selnameEl.textContent = `${def.icon} ${def.name}`;
 }
 
+function addSpawned(def, x, y, z, ry, uid) {
+  const mesh = def.build();
+  mesh.position.set(x, y, z);
+  mesh.rotation.y = ry;
+  spawnedGroup.add(mesh);
+  const o = { mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: null, uid: uid || uidCounter++ };
+  if (uid && uid >= uidCounter) uidCounter = uid + 1;
+  objects.push(o);
+  return o;
+}
+
 function spawnSelected() {
   if (S.driving) return;
   const def = CATALOG[S.sel];
-  const mesh = def.build();
   const dir = forwardFlat();
-  mesh.position.set(player.pos.x + dir.x * 3, 0, player.pos.z + dir.z * 3);
-  mesh.rotation.y = player.yaw + Math.PI;
-  spawnedGroup.add(mesh);
-  objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: null });
+  const x = player.pos.x + dir.x * 3, z = player.pos.z + dir.z * 3;
+  const o = addSpawned(def, x, 0, z, player.yaw + Math.PI);
   playPop();
+  mpBroadcast({ t: 'spawn', id: def.id, x, y: 0, z, ry: o.mesh.rotation.y, uid: o.uid });
 }
 
 function removeObject(obj) {
@@ -1628,6 +1657,7 @@ function removeObject(obj) {
   const i = objects.indexOf(obj);
   if (i === -1) return;
   objects.splice(i, 1);
+  if (!mpQuiet) mpBroadcast({ t: 'rm', uid: obj.uid });
   if (obj.mesh.parent) obj.mesh.parent.remove(obj.mesh);
   obj.mesh.traverse(o => {
     if (o.geometry) o.geometry.dispose();
@@ -1710,7 +1740,7 @@ function nukeDevastation(p, radius) {
   crimes = 0;
   crimeTimer = 0;
   copSpawnT = 0;
-  S.staticT = 12;
+  if (SET.staticFx) S.staticT = 12;
   for (const o of [...objects]) removeObject(o);
   const zeroM = new THREE.Matrix4();
   const _im = new THREE.Matrix4();
@@ -1761,6 +1791,7 @@ function explode(obj) {
   const p = obj.mesh.position.clone();
   const spec = obj.spec || BOMBS.tnt;
   removeObject(obj);
+  mpBroadcast({ t: 'boom', id: obj.id, x: +p.x.toFixed(2), z: +p.z.toFixed(2) });
   playBoom();
   if (spec.nuke) { playThunder(); flashScreen(); }
   S.shakeT = spec.shake;
@@ -2034,7 +2065,7 @@ function loadFromXML(text) {
     mesh.rotation.y = parseFloat(el.getAttribute('ry')) || 0;
     spawnedGroup.add(mesh);
     const rawUrl = el.getAttribute('url');
-    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: rawUrl && parseVideo(rawUrl) ? rawUrl : null });
+    objects.push({ mesh, vel: new THREE.Vector3(), tnt: !!def.tnt, type: def.drive ? 'car' : 'prop', id: def.id, spec: BOMBS[def.id] || null, tv: !!def.tv, seat: !!def.seat, url: rawUrl && parseVideo(rawUrl) ? rawUrl : null, uid: uidCounter++ });
   }
 
   document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
@@ -2467,7 +2498,7 @@ function updateNPCs(dt) {
   const copCount = npcs.filter(n => n.type === 'cop').length;
   if (crimes <= 0 && copCount > 0) {
     for (const n of [...npcs]) if (n.type === 'cop') removeNPC(n);
-  } else if (crimes > 0 && copCount < 2) {
+  } else if (SET.police && crimes > 0 && copCount < 2) {
     copSpawnT -= dt;
     if (copSpawnT <= 0) { spawnCop(); copSpawnT = 3; }
   }
@@ -2518,6 +2549,11 @@ const noiseImg = noiseCtx.createImageData(160, 90);
 let noiseFrame = 0;
 
 function updateStatic(dt) {
+  if (!SET.staticFx) {
+    S.staticT = 0;
+    noiseCanvas.style.display = 'none';
+    return;
+  }
   if (!S.staticT || S.staticT <= 0) return;
   S.staticT -= dt;
   if (S.staticT <= 0) {
@@ -2712,6 +2748,7 @@ function playBoom() {
 function startGame() {
   initAudio();
   if (AC && AC.state === 'suspended') AC.resume();
+  applySettings();
   if (builtMap !== S.map) buildWorld(S.map);
 
   menuOverlay.classList.add('hidden');
@@ -2730,7 +2767,7 @@ function startGame() {
     return;
   }
   S.playing = false;
-  canvas.requestPointerLock();
+  try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {}
 }
 
 document.querySelectorAll('.map-card').forEach(card => {
@@ -2739,6 +2776,7 @@ document.querySelectorAll('.map-card').forEach(card => {
     card.classList.add('selected');
     S.map = card.dataset.map;
     buildWorld(S.map);
+    if (MP.active && MP.host) mpBroadcast({ t: 'map', map: S.map });
   });
 });
 
@@ -3165,6 +3203,297 @@ document.addEventListener('pointerlockchange', () => {
   }
 });
 
+// ---------- Multiplayer (P2P) ----------
+const mpOverlay = document.getElementById('mp-overlay');
+const MP = { peer: null, conns: [], host: false, active: false, code: '', remotes: new Map(), sendT: 0 };
+let mpQuiet = false;
+
+function mpLib(cb) {
+  if (window.Peer) return cb(true);
+  const s = document.createElement('script');
+  s.src = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.4/dist/peerjs.min.js';
+  s.onload = () => cb(true);
+  s.onerror = () => cb(false);
+  document.head.appendChild(s);
+}
+
+function mpStatus(t) { const el = document.getElementById('mp-status'); if (el) el.textContent = t; }
+
+function mpGenCode() {
+  const ab = new Uint8Array(5);
+  crypto.getRandomValues(ab);
+  const abc = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  return Array.from(ab, b => abc[b % abc.length]).join('');
+}
+
+function mpEnsureRemote(pid) {
+  let r = MP.remotes.get(pid);
+  if (r) return r;
+  const mesh = buildHumanoid({ shirt: 0x7a3cc9, pants: 0x1e2a4a, cap: 0x30104a });
+  scene.add(mesh);
+  r = { mesh, tx: null, ty: 0, tz: 0, yaw: 0, seen: performance.now(), walkT: 0 };
+  MP.remotes.set(pid, r);
+  return r;
+}
+
+function mpRemoveRemote(pid) {
+  const r = MP.remotes.get(pid);
+  if (!r) return;
+  scene.remove(r.mesh);
+  r.mesh.traverse(o => { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+  MP.remotes.delete(pid);
+}
+
+function mpBroadcast(msg) {
+  if (!MP.active) return;
+  for (const c of MP.conns) {
+    if (c.open) { try { c.send(msg); } catch (e) {} }
+  }
+}
+
+function mpAddObject(id, x, y, z, ry, uid) {
+  if (uid && objects.some(o => o.uid === uid)) return;
+  const def = CATALOG.find(d => d.id === id);
+  if (!def) return;
+  const o = addSpawned(def, x, y || 0, z, ry || 0, uid);
+  o.remote = true;
+}
+
+function mpUseMap(map) {
+  if (!MAPS[map] || map === S.map) return;
+  S.map = map;
+  buildWorld(S.map);
+  mapnameEl.textContent = MAPS[S.map].name.toUpperCase();
+  document.querySelectorAll('.map-card').forEach(c => c.classList.toggle('selected', c.dataset.map === S.map));
+}
+
+function mpOnData(d, c) {
+  if (!d || typeof d !== 'object') return;
+  if (d.t === 'init') {
+    if (MP.host) return;
+    mpUseMap(d.map);
+    S.night = !!d.night;
+    applyAtmosphere();
+    mpQuiet = true;
+    for (const o of [...objects]) removeObject(o);
+    mpQuiet = false;
+    for (const od of (d.objs || [])) mpAddObject(od.id, od.x, od.y, od.z, od.ry, od.uid);
+    if (!S.started) startGame();
+    else showMsg('🎮 Мир синхронизирован');
+  } else if (d.t === 'st') {
+    if (!Array.isArray(d.p) || d.p.length < 3) return;
+    const r = mpEnsureRemote(c.peer);
+    r.tx = d.p[0]; r.ty = d.p[1]; r.tz = d.p[2]; r.yaw = d.y; r.seen = performance.now();
+  } else if (d.t === 'spawn') {
+    mpAddObject(d.id, d.x, d.y, d.z, d.ry, d.uid);
+  } else if (d.t === 'rm') {
+    const o = objects.find(oo => oo.uid === d.uid);
+    if (o) removeObject(o);
+  } else if (d.t === 'map') {
+    if (!MP.host) { mpUseMap(d.map); showMsg('🗺 Хост сменил карту'); }
+  } else if (d.t === 'boom') {
+    const spec = BOMBS[d.id] || BOMBS.tnt;
+    const p = new THREE.Vector3(d.x, 1, d.z);
+    playBoom();
+    S.shakeT = Math.max(S.shakeT || 0, spec.shake);
+    if (spec.nuke) {
+      playThunder();
+      flashScreen();
+      nukeDevastation(p, Math.hypot(GW * TILE, GH * TILE));
+    } else {
+      const flash = new THREE.PointLight(0xffa040, spec.flash, spec.flashDist, 1.5);
+      flash.position.copy(p).setY(1.5);
+      worldGroup.add(flash);
+      setTimeout(() => { if (worldGroup) worldGroup.remove(flash); }, 160);
+      for (const o of [...objects]) {
+        if (o.mesh.position.distanceTo(p) < spec.radius) removeObject(o);
+      }
+    }
+  } else if (d.t === 'bye') {
+    mpRemoveRemote(c.peer);
+  }
+}
+
+function mpHost() {
+  mpLib(ok => {
+    if (!ok) return mpStatus('⚠️ Не удалось загрузить сетевую библиотеку. Проверь интернет.');
+    if (MP.peer) { try { MP.peer.destroy(); } catch (e) {} }
+    MP.conns = [];
+    MP.host = true; MP.active = true;
+    for (const pid of [...MP.remotes.keys()]) mpRemoveRemote(pid);
+    MP.code = mpGenCode();
+    mpStatus('Создание игры...');
+    const peer = new Peer('tsg-' + MP.code.toLowerCase());
+    MP.peer = peer;
+    peer.on('open', () => {
+      mpStatus('✅ Игра создана! Отправь код другу');
+      document.getElementById('mp-code').textContent = 'КОД: ' + MP.code;
+      playClick();
+    });
+    peer.on('connection', c => {
+      MP.conns.push(c);
+      c.on('open', () => {
+        c.send({ t: 'init', map: S.map, night: S.night, objs: objects.map(o => ({ id: o.id, x: +o.mesh.position.x.toFixed(2), y: +o.mesh.position.y.toFixed(2), z: +o.mesh.position.z.toFixed(2), ry: +o.mesh.rotation.y.toFixed(2), uid: o.uid })) });
+        mpStatus('✅ Игрок подключился!');
+        playClick();
+      });
+      c.on('data', d => mpOnData(d, c));
+      c.on('close', () => {
+        MP.conns = MP.conns.filter(x => x !== c);
+        mpRemoveRemote(c.peer);
+        mpStatus('Игрок отключился');
+      });
+      c.on('error', () => {});
+    });
+    peer.on('error', e => mpStatus('⚠️ Ошибка сети: ' + (e.type || 'неизвестно')));
+  });
+}
+
+function mpJoin(codeRaw) {
+  const code = String(codeRaw || '').trim().toUpperCase();
+  if (code.length < 4) return mpStatus('⚠️ Введи код игры (5 символов)');
+  mpLib(ok => {
+    if (!ok) return mpStatus('⚠️ Не удалось загрузить сетевую библиотеку. Проверь интернет.');
+    if (MP.peer) { try { MP.peer.destroy(); } catch (e) {} }
+    MP.conns = [];
+    MP.host = false; MP.active = true;
+    for (const pid of [...MP.remotes.keys()]) mpRemoveRemote(pid);
+    mpStatus('Подключение к ' + code + '...');
+    const peer = new Peer();
+    MP.peer = peer;
+    let opened = false;
+    peer.on('open', () => {
+      const c = peer.connect('tsg-' + code.toLowerCase(), { reliable: true });
+      MP.conns = [c];
+      c.on('open', () => { opened = true; mpStatus('✅ Подключено!'); playClick(); });
+      c.on('data', d => mpOnData(d, c));
+      c.on('close', () => { mpStatus('⚠️ Соединение потеряно'); mpRemoveRemote(c.peer); });
+      c.on('error', () => mpStatus('⚠️ Ошибка подключения'));
+    });
+    peer.on('error', e => {
+      if (e.type === 'peer-unavailable') mpStatus('⚠️ Игра с таким кодом не найдена');
+      else mpStatus('⚠️ Ошибка сети: ' + (e.type || 'неизвестно'));
+    });
+    setTimeout(() => { if (!opened && MP.active && !MP.host) mpStatus('⚠️ Хост не отвечает. Проверь код.'); }, 9000);
+  });
+}
+
+function mpLeave() {
+  mpBroadcast({ t: 'bye' });
+  for (const pid of [...MP.remotes.keys()]) mpRemoveRemote(pid);
+  MP.conns = [];
+  MP.active = false; MP.host = false;
+  if (MP.peer) { try { MP.peer.destroy(); } catch (e) {} MP.peer = null; }
+  document.getElementById('mp-code').textContent = '—';
+  mpStatus('Офлайн');
+}
+
+function mpUpdate(dt) {
+  if (!MP.active) return;
+  MP.sendT -= dt;
+  if (MP.sendT <= 0) {
+    MP.sendT = 0.1;
+    mpBroadcast({ t: 'st', p: [+player.pos.x.toFixed(2), +player.pos.y.toFixed(2), +player.pos.z.toFixed(2)], y: +player.yaw.toFixed(2) });
+  }
+  const now = performance.now();
+  const k = Math.min(1, dt * 12);
+  for (const [pid, r] of MP.remotes) {
+    if (now - r.seen > 10000) { mpRemoveRemote(pid); continue; }
+    if (r.tx === null) continue;
+    const dx = r.tx - r.mesh.position.x, dz = r.tz - r.mesh.position.z;
+    const moving = Math.hypot(dx, dz) > 0.05;
+    r.mesh.position.x += dx * k;
+    r.mesh.position.y += (r.ty - r.mesh.position.y) * k;
+    r.mesh.position.z += dz * k;
+    r.mesh.rotation.y = lerpAngle(r.mesh.rotation.y, r.yaw + Math.PI, k);
+    r.walkT += dt * (moving ? 9 : 0);
+    const L = r.mesh.userData.limbs;
+    if (L) {
+      const sw = moving ? Math.sin(r.walkT) * 0.7 : 0;
+      L.legL.rotation.x = sw; L.legR.rotation.x = -sw;
+      L.armL.rotation.x = -sw * 0.7; L.armR.rotation.x = sw * 0.7;
+    }
+  }
+}
+
+window.addEventListener('pagehide', () => mpBroadcast({ t: 'bye' }));
+
+document.getElementById('mp-btn').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.remove('hidden'); });
+document.getElementById('mp-btn2').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.remove('hidden'); });
+document.getElementById('mp-close').addEventListener('click', (e) => { e.stopPropagation(); mpOverlay.classList.add('hidden'); });
+document.getElementById('mp-host').addEventListener('click', (e) => { e.stopPropagation(); playClick(); mpHost(); });
+document.getElementById('mp-join').addEventListener('click', (e) => { e.stopPropagation(); playClick(); mpJoin(document.getElementById('mp-join-code').value); });
+document.getElementById('mp-leave').addEventListener('click', (e) => { e.stopPropagation(); mpLeave(); });
+document.getElementById('mp-join-code').addEventListener('keydown', (e) => {
+  e.stopPropagation();
+  if (e.code === 'Enter') mpJoin(e.target.value);
+});
+mpOverlay.addEventListener('click', (e) => e.stopPropagation());
+
+// ---------- Settings UI ----------
+const settingsOverlay = document.getElementById('settings-overlay');
+const soundEl = document.getElementById('set-sound');
+const soundValEl = document.getElementById('set-sound-val');
+
+function refreshSettingsUI() {
+  soundEl.value = SET.sound;
+  soundValEl.textContent = SET.sound + '%';
+  document.querySelectorAll('#set-gfx button').forEach(b => b.classList.toggle('on', b.dataset.g === SET.gfx));
+  document.querySelectorAll('#set-police button').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === SET.police));
+  document.querySelectorAll('#set-static button').forEach(b => b.classList.toggle('on', (b.dataset.v === '1') === SET.staticFx));
+}
+
+function openSettings() {
+  refreshSettingsUI();
+  settingsOverlay.classList.remove('hidden');
+  if (!IS_TOUCH && document.pointerLockElement === canvas) document.exitPointerLock();
+  if (S.started) S.playing = false;
+}
+
+function closeSettings() {
+  settingsOverlay.classList.add('hidden');
+  if (!S.started) return;
+  if (IS_TOUCH) {
+    S.playing = true;
+    pauseOverlay.classList.add('hidden');
+  } else {
+    try { const r = canvas.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch (e) {}
+  }
+}
+
+soundEl.addEventListener('input', () => {
+  SET.sound = +soundEl.value;
+  soundValEl.textContent = SET.sound + '%';
+  applySettings();
+});
+soundEl.addEventListener('keydown', (e) => e.stopPropagation());
+soundEl.addEventListener('click', (e) => e.stopPropagation());
+document.querySelectorAll('#set-gfx button').forEach(b => b.addEventListener('click', (e) => {
+  e.stopPropagation();
+  SET.gfx = b.dataset.g;
+  applySettings();
+  refreshSettingsUI();
+  playClick();
+}));
+document.querySelectorAll('#set-police button').forEach(b => b.addEventListener('click', (e) => {
+  e.stopPropagation();
+  SET.police = b.dataset.v === '1';
+  applySettings();
+  refreshSettingsUI();
+  playClick();
+}));
+document.querySelectorAll('#set-static button').forEach(b => b.addEventListener('click', (e) => {
+  e.stopPropagation();
+  SET.staticFx = b.dataset.v === '1';
+  applySettings();
+  refreshSettingsUI();
+  playClick();
+}));
+document.getElementById('set-close').addEventListener('click', (e) => { e.stopPropagation(); closeSettings(); });
+settingsOverlay.addEventListener('click', (e) => e.stopPropagation());
+document.getElementById('settings-btn').addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+document.getElementById('settings-btn2').addEventListener('click', (e) => { e.stopPropagation(); openSettings(); });
+
 // ---------- Main loop ----------
 let lastT = performance.now();
 function loop(now) {
@@ -3231,6 +3560,8 @@ function loop(now) {
       playerLight.position.copy(camera.position);
     }
   }
+
+  if (S.started) mpUpdate(dt);
 
   renderer.render(scene, camera);
   updateTvCss();

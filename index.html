@@ -44,6 +44,28 @@
 
   .save-row { display: flex; gap: 10px; margin-top: 22px; }
   .btn.small { padding: 10px 18px; font-size: 14px; letter-spacing: 0.08em; border-left-width: 4px; }
+
+  #settings-overlay, #mp-overlay { z-index: 45; }
+  .set-group { margin: 13px 0; width: min(430px, 92vw); text-align: left; }
+  .set-label { color: #d89628; font-size: 12px; letter-spacing: 0.18em; font-weight: 700; margin-bottom: 7px; font-family: 'Courier New', monospace; }
+  .set-opts { display: flex; gap: 8px; flex-wrap: wrap; }
+  .set-opts button {
+    background: #141414; border: 2px solid #2c2c2c; color: #8a847a;
+    font-family: inherit; font-size: 13px; font-weight: 700; letter-spacing: 0.06em;
+    padding: 8px 14px; cursor: pointer; text-transform: uppercase; transition: all 0.12s;
+  }
+  .set-opts button.on { border-color: #d89628; color: #ffcf5a; background: #1a1208; }
+  .set-opts button:hover { border-color: #d89628; }
+  #set-sound { width: 100%; accent-color: #d89628; cursor: pointer; }
+  #set-sound-val { color: #ffcf5a; font-size: 12px; font-family: 'Courier New', monospace; font-weight: 700; }
+  #mp-code { color: #ffcf5a; font-size: 22px; letter-spacing: 0.3em; font-weight: 900; margin: 8px 0; font-family: 'Courier New', monospace; }
+  #mp-status { color: #8a847a; font-size: 12px; margin: 8px 0; font-family: 'Courier New', monospace; font-weight: 700; min-height: 16px; }
+  #mp-join-code {
+    background: #141414; border: 2px solid #2c2c2c; color: #ffcf5a;
+    font: 700 16px 'Courier New', monospace; letter-spacing: 0.3em;
+    padding: 10px 12px; width: 140px; text-align: center; text-transform: uppercase; outline: none;
+  }
+  #mp-join-code:focus { border-color: #d89628; }
   .btn:hover { border-color: #d89628; background: #1c1508; color: #ffcf5a; }
 
   .help { margin-top: 24px; font-size: 12px; line-height: 1.9; color: #7d776d; font-family: 'Courier New', monospace; font-weight: 700; }
@@ -177,7 +199,7 @@
 <div id="menu-overlay" class="overlay">
   <h1 class="title">THE SANDBOX GAME</h1>
   <div class="subtitle">ПОСТРОЙ СВОЙ МИР</div>
-  <div class="verline">ВЕРСИЯ 1.1.0</div>
+  <div class="verline">ВЕРСИЯ 1.2.0</div>
   <div class="map-row">
     <div class="map-card selected" data-map="yard">
       <div class="map-icon">🏚️</div>
@@ -206,6 +228,10 @@
     </div>
   </div>
   <button class="btn" id="start-btn">ИГРАТЬ</button>
+  <div class="save-row">
+    <button class="btn small" id="mp-btn">🎮 Мультиплеер</button>
+    <button class="btn small" id="settings-btn">⚙ Настройки</button>
+  </div>
   <div class="help">
     <b>WASD</b> — движение · <b>МЫШЬ</b> — осмотр · <b>SHIFT</b> — бег · <b>F</b> — фонарик<br>
     <b>ЛКМ</b> — поставить объект · <b>ПКМ / X</b> — удалить (ТНТ взорвётся!) · <b>1-9 / колесо</b> — выбор · <b>B</b> — рюкзак · <b>V/C</b> — телевизор (YouTube/mp4 на экране!) · <b>🎮 приставка рядом с ТВ</b> — понг на экране · <b>T</b> — день/ночь<br>
@@ -228,6 +254,10 @@
     <button class="btn small" id="bag-btn">🎒 Рюкзак</button>
     <button class="btn small" id="exit-btn">🚪 Выйти из карты</button>
   </div>
+  <div class="save-row">
+    <button class="btn small" id="settings-btn2">⚙ Настройки</button>
+    <button class="btn small" id="mp-btn2">🎮 Мультиплеер</button>
+  </div>
   <input type="file" id="xml-file" accept=".xml,text/xml" hidden>
 </div>
 
@@ -237,6 +267,56 @@
   <div id="bag-list"></div>
   <div class="save-row" style="margin-top:16px;">
     <button class="btn small" id="bag-close">ЗАКРЫТЬ</button>
+  </div>
+</div>
+
+<div id="settings-overlay" class="overlay hidden">
+  <h2>⚙ НАСТРОЙКИ</h2>
+  <div class="set-group">
+    <div class="set-label">🔊 ЗВУК: <span id="set-sound-val">70%</span></div>
+    <input type="range" id="set-sound" min="0" max="100" value="70">
+  </div>
+  <div class="set-group">
+    <div class="set-label">🖥 ГРАФИКА</div>
+    <div class="set-opts" id="set-gfx">
+      <button data-g="high">Мощно</button>
+      <button data-g="med">Средно</button>
+      <button data-g="low">Слабо</button>
+      <button data-g="calc">Калькулятор</button>
+    </div>
+  </div>
+  <div class="set-group">
+    <div class="set-label">🚨 ПОЛИЦИЯ</div>
+    <div class="set-opts" id="set-police">
+      <button data-v="1">Вкл</button>
+      <button data-v="0">Выкл</button>
+    </div>
+  </div>
+  <div class="set-group">
+    <div class="set-label">📺 ПОМЕХИ ПОСЛЕ ЯДЕРКИ</div>
+    <div class="set-opts" id="set-static">
+      <button data-v="1">Вкл</button>
+      <button data-v="0">Выкл</button>
+    </div>
+  </div>
+  <div class="save-row"><button class="btn small" id="set-close">ЗАКРЫТЬ</button></div>
+</div>
+
+<div id="mp-overlay" class="overlay hidden">
+  <h2>🎮 МУЛЬТИПЛЕЕР</h2>
+  <p>Создай игру и отправь код другу — он введёт код и подключится (P2P, без сервера)</p>
+  <div class="save-row">
+    <button class="btn small" id="mp-host">🎮 СОЗДАТЬ ИГРУ</button>
+  </div>
+  <div id="mp-code">—</div>
+  <div class="save-row">
+    <input id="mp-join-code" placeholder="КОД" maxlength="5" autocomplete="off">
+    <button class="btn small" id="mp-join">ПОДКЛЮЧИТЬСЯ</button>
+  </div>
+  <div id="mp-status">Офлайн</div>
+  <div class="save-row">
+    <button class="btn small" id="mp-leave">ОТКЛЮЧИТЬСЯ</button>
+    <button class="btn small" id="mp-close">ЗАКРЫТЬ</button>
   </div>
 </div>
 
@@ -285,6 +365,6 @@
   }
 })();
 </script>
-<script type="module" src="game.js?v=32"></script>
+<script type="module" src="game.js?v=33"></script>
 </body>
 </html>
