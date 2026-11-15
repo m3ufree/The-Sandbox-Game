@@ -970,6 +970,7 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'KeyV' || e.code === 'KeyC') {
     const o = findAimed();
     if (o && o.tv) { if (e.code === 'KeyV') setTvLink(o); else watchTv(o); }
+    else if (e.code === 'KeyC' && S.tvObj) watchTv(S.tvObj);
     else if (o && o.seat && e.code === 'KeyC') sitOn(o);
     else if (o && o.console && e.code === 'KeyC') {
       const tv = nearestTvTo(o);
@@ -2922,7 +2923,8 @@ tvOffBtn.textContent = '✕ ВЫКЛЮЧИТЬ ТВ (C)';
 tvOffBtn.style.cssText = 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:30;display:none;background:#1a1208;color:#ffcf5a;border:2px solid #d89628;padding:8px 18px;font:bold 13px \'Courier New\',monospace;letter-spacing:0.1em;cursor:pointer;border-radius:6px;';
 tvOffBtn.addEventListener('click', (e) => {
   e.stopPropagation();
-  stopTvScreen();
+  if (S.tvObj) watchTv(S.tvObj);
+  else stopTvScreen();
   if (!IS_TOUCH && S.started) canvas.requestPointerLock();
 });
 document.body.appendChild(tvOffBtn);
@@ -2987,6 +2989,7 @@ function ensureTvVideo() {
 
 function stopTvScreen() {
   S.gameOn = false;
+  S.tvChan = null;
   if (S.tvObj) {
     const scr = S.tvObj.mesh.userData.screen;
     if (scr) {
@@ -3041,6 +3044,7 @@ function startGameMode(tvObj) {
   if (wasSame) { showMsg('🎮 Приставка выключена'); return; }
   S.tvObj = tvObj;
   S.gameOn = true;
+  S.tvChan = 'game';
   const scr = tvObj.mesh.userData.screen;
   if (!gameTexture) {
     gameTexture = new THREE.CanvasTexture(gameCanvas);
@@ -3051,7 +3055,7 @@ function startGameMode(tvObj) {
     scr.material.color.set(0xffffff);
     scr.material.needsUpdate = true;
   }
-  showMsg('🎮 Понг на экране! C — выключить');
+  showMsg('🎮 Понг на экране! C — след. канал');
 }
 
 function updateTvGame(dt) {
@@ -3087,17 +3091,117 @@ function updateTvGame(dt) {
   gameTexture.needsUpdate = true;
 }
 
-function watchTv(o) {
-  const p = parseVideo(o.url);
-  if (!p) {
-    if (nearestConsoleTo(o)) { startGameMode(o); return; }
-    setTvLink(o);
-    return;
+// ---------- Channel: 12.0 GAME NEWS ----------
+const NEWS_ITEMS = [
+  'ВЕРСИЯ 1.2.0! НАСТРОЙКИ ЗВУКА, ГРАФИКИ И МУЛЬТИПЛЕЕР УЖЕ ЗДЕСЬ!',
+  'КРИКНИ (G) — И ВСЕ ВОКРУГ ЗАКУДАХТ НА 10 СЕКУНД! КУДАХ-КУДАХ!',
+  'ЯДЕРКА ТЕПЕРЬ УНИЧТОЖАЕТ ВСЮ КАРТУ. ПОЛИЦИЯ ПРОВЕРЯЕТ УБЫТКИ.',
+  'МАШИНЫ СТАЛИ МЯГКИМИ: SOFTBODY ГАРАНТИРУЕТ ВМЯТИНЫ!',
+  'ПРИСТАВКА + ТЕЛЕВИЗОР = ПОНГ ПРЯМО НА ЭКРАНЕ!',
+  'СЕЛО СУЛОАОУ ОТРИЦАЕТ СЛУХИ О ГУСЕ-МУТАНТЕ',
+  'БОЖЬЯ КАРА: «Я ВСЁ ВИЖУ» — ЗАЯВИЛА ОНА',
+  'СОВЕТ ДНЯ: НЕ СТОЙ БЛИЗКО К ТНТ',
+];
+
+const newsCanvas = document.createElement('canvas');
+newsCanvas.width = 256;
+newsCanvas.height = 192;
+const newsCtx = newsCanvas.getContext('2d');
+let newsTexture = null;
+const newsSt = { t: 0, ticker: 0 };
+
+const CHAN_NAME = { video: '📺 ВИДЕО', news: '📢 12.0 НОВОСТИ', game: '🎮 ПОНГ' };
+
+function startNewsMode(tvObj) {
+  S.tvObj = tvObj;
+  S.tvChan = 'news';
+  S.gameOn = false;
+  newsSt.t = 0;
+  newsSt.ticker = 0;
+  if (!newsTexture) {
+    newsTexture = new THREE.CanvasTexture(newsCanvas);
+    newsTexture.colorSpace = THREE.SRGBColorSpace;
   }
-  const wasSame = S.tvObj === o;
-  stopTvScreen();
-  if (wasSame) { showMsg('📺 ТВ выключен'); return; }
+  const scr = tvObj.mesh.userData.screen;
+  if (scr) {
+    scr.material.map = newsTexture;
+    scr.material.color.set(0xffffff);
+    scr.material.needsUpdate = true;
+  }
+}
+
+function newsWrap(c, text, x, y, maxW, lh) {
+  const words = text.split(' ');
+  let line = '', yy = y;
+  for (const w of words) {
+    const test = line ? line + ' ' + w : w;
+    if (c.measureText(test).width > maxW && line) { c.fillText(line, x, yy); line = w; yy += lh; }
+    else line = test;
+  }
+  if (line) c.fillText(line, x, yy);
+  return yy;
+}
+
+function updateNews(dt) {
+  if (!S.tvObj || S.tvChan !== 'news' || !newsTexture) return;
+  newsSt.t += dt;
+  newsSt.ticker += dt * 55;
+  const c = newsCtx, W = 256, H = 192;
+  c.fillStyle = '#0d0b06';
+  c.fillRect(0, 0, W, H);
+  c.fillStyle = '#d89628';
+  c.fillRect(0, 0, W, 26);
+  c.fillStyle = '#141210';
+  c.font = 'bold 15px monospace';
+  c.textAlign = 'left';
+  c.fillText('12.0', 8, 18);
+  c.font = 'bold 12px monospace';
+  c.fillText('НОВОСТИ ИГРЫ', 52, 17);
+  c.fillStyle = '#ff4040';
+  c.fillRect(W - 48, 8, 8, 8);
+  c.fillStyle = '#141210';
+  c.font = 'bold 10px monospace';
+  c.fillText('LIVE', W - 36, 17);
+  const idx = Math.floor(newsSt.t / 5) % NEWS_ITEMS.length;
+  c.fillStyle = '#1a1208';
+  c.fillRect(10, 36, W - 20, 78);
+  c.strokeStyle = '#d89628';
+  c.lineWidth = 2;
+  c.strokeRect(10, 36, W - 20, 78);
+  c.lineWidth = 1;
+  c.fillStyle = '#ffcf5a';
+  c.font = 'bold 13px monospace';
+  newsWrap(c, NEWS_ITEMS[idx], 18, 58, W - 36, 17);
+  c.fillStyle = '#5c564d';
+  c.font = 'bold 9px monospace';
+  c.fillText('СЛЕДУЮЩАЯ НОВОСТЬ ЧЕРЕЗ ' + (5 - Math.floor(newsSt.t % 5)) + '…', 18, 106);
+  c.fillStyle = '#241a08';
+  c.fillRect(0, H - 24, W, 24);
+  c.fillStyle = '#d89628';
+  c.fillRect(0, H - 24, W, 2);
+  const full = NEWS_ITEMS.join('  •  ') + '  •  ';
+  c.font = 'bold 11px monospace';
+  const tw = c.measureText(full).width || 1;
+  const off = -(newsSt.ticker % tw);
+  c.fillStyle = '#ffe9a8';
+  c.fillText(full, off, H - 8);
+  c.fillText(full, off + tw, H - 8);
+  newsTexture.needsUpdate = true;
+}
+
+// ---------- TV channels ----------
+function tvChannels(o) {
+  const ch = [];
+  if (parseVideo(o.url)) ch.push('video');
+  ch.push('news');
+  if (nearestConsoleTo(o)) ch.push('game');
+  return ch;
+}
+
+function startVideoMode(o, p) {
   S.tvObj = o;
+  S.tvChan = 'video';
+  S.gameOn = false;
   const scr = o.mesh.userData.screen;
   if (p.kind === 'yt') {
     tvIframe.src = 'https://www.youtube.com/embed/' + p.id + '?autoplay=1&playsinline=1&rel=0&modestbranding=1';
@@ -3115,7 +3219,32 @@ function watchTv(o) {
     }
     v.play().catch(() => showMsg('▶️ Нажми ещё раз, чтобы включить звук'));
   }
-  showMsg('📺 Включено! C — выключить');
+}
+
+function watchTv(o) {
+  const p = parseVideo(o.url);
+  if (S.tvObj !== o) {
+    stopTvScreen();
+    const first = p ? 'video' : (nearestConsoleTo(o) ? 'game' : 'news');
+    if (first === 'video') startVideoMode(o, p);
+    else if (first === 'game') startGameMode(o);
+    else startNewsMode(o);
+    showMsg(CHAN_NAME[first] + ' · C — след. канал');
+    return;
+  }
+  const chs = tvChannels(o);
+  const i = chs.indexOf(S.tvChan);
+  if (i === -1 || i === chs.length - 1) {
+    stopTvScreen();
+    showMsg('📺 ТВ выключен');
+    return;
+  }
+  stopTvScreen();
+  const next = chs[i + 1];
+  if (next === 'video') startVideoMode(o, p);
+  else if (next === 'game') startGameMode(o);
+  else startNewsMode(o);
+  showMsg(CHAN_NAME[next] + ' · C — след. канал');
 }
 
 function sitOn(o) {
@@ -3158,6 +3287,7 @@ function updateTvCss() {
     return;
   }
   tvOffBtn.style.display = 'block';
+  tvOffBtn.textContent = '📢 СЛЕД. КАНАЛ (C) · ' + (CHAN_NAME[S.tvChan] || 'ТВ');
   const scr = o.mesh.userData.screen;
   if (!scr) { cssWrap.style.display = 'none'; return; }
   _tvV1.setFromMatrixPosition(scr.matrixWorld);
@@ -3684,8 +3814,8 @@ function loop(now) {
           promptEl.style.opacity = 1;
         } else if (tvAim) {
           promptEl.textContent = tvAim.url
-            ? (IS_TOUCH ? '📺 — смотреть · 🔗 — сменить' : 'C — смотреть · V — сменить ссылку')
-            : (IS_TOUCH ? '🔗 — вставить ссылку' : 'V — вставить ссылку (YouTube/mp4)');
+            ? (IS_TOUCH ? '📺 — каналы · 🔗 — ссылка' : 'C — каналы (видео/12.0/понг) · V — ссылка')
+            : (IS_TOUCH ? '📺 — каналы · 🔗 — ссылка' : 'C — каналы (12.0 НОВОСТИ/понг) · V — ссылка (YouTube/mp4)');
           promptEl.style.opacity = 1;
         } else if (conAim) {
           const tvForCon = nearestTvTo(conAim);
@@ -3704,6 +3834,7 @@ function loop(now) {
       updateNPCs(dt);
       updateFX(dt);
       if (S.gameOn && S.tvObj) updateTvGame(dt);
+      if (S.tvChan === 'news' && S.tvObj) updateNews(dt);
     } else {
       camera.position.set(player.pos.x, player.pos.y, player.pos.z);
       camera.rotation.set(player.pitch, player.yaw, 0);
